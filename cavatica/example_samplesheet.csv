@@ -1,0 +1,6 @@
+sample,fastq_1,fastq_2
+CONTROL_REP1,vs://project/sample1_R1.fastq.gz,vs://project/sample1_R2.fastq.gz
+CONTROL_REP2,vs://project/sample2_R1.fastq.gz,vs://project/sample2_R2.fastq.gz
+TREATED_REP1,vs://project/sample3_R1.fastq.gz,vs://project/sample3_R2.fastq.gz
+TREATED_REP2,vs://project/sample4_R1.fastq.gz,vs://project/sample4_R2.fastq.gz
+SINGLE_END_SAMPLE,vs://project/sample5.fastq.gz,

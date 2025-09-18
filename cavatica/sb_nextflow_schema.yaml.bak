@@ -1,0 +1,1300 @@
+app_content:
+  entrypoint: main.nf
+  executor_version: 24.04.2
+class: nextflow
+cwlVersion: None
+doc: "# `riboseq`
+
+
+  The `riboseq` workflow is an nf-core pipeline for ribosome profiling data analysis
+  that processes ribosome footprinting sequencing data.
+
+
+  The workflow processes FASTQ files from ribosome profiling experiments using various
+  tools to:
+
+
+  - Trim adapter sequences and filter reads
+
+  - Align reads to reference genomes
+
+  - Generate ribosome occupancy profiles
+
+  - Perform quality control assessments
+
+  - Analyze ribosome P-site positions
+
+  - Calculate translation efficiency metrics
+
+
+  The pipeline supports both single-end and paired-end sequencing data and can handle
+  multiple samples in a batch.
+
+
+  Full documentation for the workflow is available in the [nf-core/riboseq GitHub
+  repository](https://github.com/nf-core/riboseq).
+
+
+  ## Steps to run the workflow on Cavatica
+
+
+  To run the `riboseq` workflow on Cavatica, you will need to follow the following
+  steps:
+
+
+  1. Upload all required input files to your Cavatica project
+
+  2. Prepare a samplesheet file with sample information and file paths. See [Required
+  input files](#required-input-files) for more details.
+
+  3. Transform the paths in the samplesheet to Cavatica `vs://` paths using the
+  `sbmanifest` tool.
+
+  4. Set options and run the `riboseq` workflow on Cavatica using the web interface.
+
+
+  ## Required input files
+
+
+  ### Primary inputs
+
+
+  - **Input samplesheet**: A CSV file containing sample information and paths to
+  FASTQ files
+
+  - **Reference genome FASTA**: Reference genome sequence file
+
+  - **Genome annotation GTF/GFF**: Gene annotation file for the reference genome
+
+
+  ### Optional inputs
+
+
+  - **Transcript FASTA**: For transcript-level analysis
+
+  - **Custom adapter sequences**: For non-standard adapter trimming
+
+  - **Blacklist regions**: Genomic regions to exclude from analysis
+
+
+  ## Samplesheet format
+
+
+  The input samplesheet should be a CSV file with the following columns:
+
+
+  ```csv
+
+  sample,fastq_1,fastq_2
+
+  SAMPLE_PE,sample_R1.fastq.gz,sample_R2.fastq.gz
+
+  SAMPLE_SE,sample.fastq.gz,
+
+  ```
+
+
+  - `sample`: Sample identifier
+
+  - `fastq_1`: Path to the first FASTQ file
+
+  - `fastq_2`: Path to the second FASTQ file (for paired-end data, leave empty for
+  single-end)
+
+
+  ## Output files
+
+
+  The workflow generates various output files including:
+
+
+  - Quality control reports
+
+  - Alignment statistics
+
+  - Ribosome occupancy profiles
+
+  - P-site position analyses
+
+  - Translation efficiency metrics
+
+  - MultiQC summary report
+
+  "
+hints:
+  - class: sbg:NextflowExecutionMode
+    value: multi-instance
+inputs:
+  - doc: Select which profile(s) you want to use for task execution.
+    id: profile
+    inputBinding:
+      itemSeparator: ","
+      prefix: -profile
+    label: Profiles
+    default: cavatica
+    type:
+      - "null"
+      - items:
+          name: profile
+          symbols:
+            - apptainer
+            - arm
+            - charliecloud
+            - conda
+            - debug
+            - docker
+            - cavatica
+            - gitpod
+            - mamba
+            - podman
+            - shifter
+            - singularity
+            - test
+            - test_full
+            - wave
+          type: enum
+        type: array
+  - doc: You will need to create a design file with information about the samples
+      in your experiment before running the pipeline. Use this parameter to specify
+      its location. It has to be a comma-separated file with 3 columns, and a header
+      row. See [usage docs](https://nf-co.re/riboseq/usage#samplesheet-input).
+    format: text/csv
+    id: input
+    inputBinding:
+      prefix: --input
+    label: Path to comma-separated file containing information about the samples in
+      the experiment.
+    sbg:category: Input/output options
+    sbg:icon: fas fa-file-csv
+    sbg:pattern: ^\S+\.csv$
+    type:
+      - File
+  - doc: This file is used to define groups of samples from 'input' to compare.  It
+      must contain at least the columns 'variable', 'reference' and 'target', and
+      optionally a 'batch' column. 'variable' and 'batch' must be columns in the
+      input sample sheet, 'reference' and 'target' are values in the column indicated
+      by 'variable'.
+    format: text/csv
+    id: contrasts
+    inputBinding:
+      prefix: --contrasts
+    label: A CSV file describing sample contrasts
+    sbg:category: Input/output options
+    sbg:icon: fas fa-adjust
+    sbg:pattern: ^\S+\.(csv|tsv|txt)$
+    type:
+      - "null"
+      - File
+  - id: outdir
+    inputBinding:
+      prefix: --outdir
+    label: The output directory where the results will be saved. You have to use absolute
+      paths to storage on Cloud infrastructure.
+    sbg:category: Input/output options
+    sbg:icon: fas fa-folder-open
+    default: riboseq_out
+    type: string
+  - doc: Set this parameter to your e-mail address to get a summary e-mail with details
+      of the run sent to you when the workflow exits. If set in your user config
+      file (`~/.nextflow/config`) then you don't need to specify this on the command
+      line for every run.
+    id: email
+    inputBinding:
+      prefix: --email
+    label: Email address for completion summary.
+    sbg:category: Input/output options
+    sbg:icon: fas fa-envelope
+    sbg:pattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    type:
+      - "null"
+      - string
+  - id: multiqc_title
+    inputBinding:
+      prefix: --multiqc_title
+    label: MultiQC report title. Printed as page header, used for filename if not
+      otherwise specified.
+    sbg:category: Input/output options
+    sbg:icon: fas fa-file-signature
+    type:
+      - "null"
+      - string
+  - doc: "If using a reference genome configured in the pipeline using iGenomes (not\
+      \ recommended), use this parameter to give the ID for the reference. This\
+      \ is then used to build the full paths for all required reference genome files\
+      \ e.g. `--genome GRCh38`. \n\nSee the [nf-core website docs](https://nf-co.re/usage/reference_genomes)\
+      \ for more details."
+    id: genome
+    inputBinding:
+      prefix: --genome
+    label: Name of iGenomes reference.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-book
+    type:
+      - "null"
+      - string
+  - doc: This parameter is *mandatory* if `--genome` is not specified. If you don't
+      have the appropriate alignment index available this will be generated for
+      you automatically. Combine with `--save_reference` to save alignment index
+      for future runs.
+    format: text/plain
+    id: fasta
+    inputBinding:
+      prefix: --fasta
+    label: Path to FASTA genome file.
+    sbg:category: Reference genome options
+    sbg:icon: far fa-file-code
+    sbg:pattern: ^\S+\.fn?a(sta)?(\.gz)?$
+    type:
+      - "null"
+      - File
+  - doc: This parameter is *mandatory* if `--genome` is not specified.
+    format: text/plain
+    id: gtf
+    inputBinding:
+      prefix: --gtf
+    label: Path to GTF annotation file.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-code-branch
+    sbg:pattern: ^\S+\.gtf(\.gz)?$
+    type:
+      - "null"
+      - File
+  - doc: This parameter must be specified if `--genome` or `--gtf` are not specified.
+    format: text/plain
+    id: gff
+    inputBinding:
+      prefix: --gff
+    label: Path to GFF3 annotation file.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-code-branch
+    sbg:pattern: ^\S+\.gff(\.gz)?$
+    type:
+      - "null"
+      - File
+  - format: text/plain
+    id: transcript_fasta
+    inputBinding:
+      prefix: --transcript_fasta
+    label: Path to FASTA transcriptome file.
+    sbg:category: Reference genome options
+    sbg:icon: far fa-file-code
+    sbg:pattern: ^\S+\.fn?a(sta)?(\.gz)?$
+    type:
+      - "null"
+      - File
+  - doc: If provided, the sequences in this file will get concatenated to the existing
+      genome FASTA file, a GTF file will be automatically created using the entire
+      sequence as the gene, transcript, and exon features, and any alignment index
+      will get created from the combined FASTA and GTF. It is recommended to save
+      the reference with `--save_reference` to re-use the index for future runs
+      so you do not need to create it again.
+    format: text/plain
+    id: additional_fasta
+    inputBinding:
+      prefix: --additional_fasta
+    label: FASTA file to concatenate to genome FASTA file e.g. containing spike-in
+      sequences.
+    sbg:category: Reference genome options
+    sbg:icon: far fa-file-code
+    sbg:pattern: ^\S+\.fn?a(sta)?(\.gz)?$
+    type:
+      - "null"
+      - File
+  - id: star_index
+    inputBinding:
+      prefix: --star_index
+    label: Path to directory or tar.gz archive for pre-built STAR index.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-bezier-curve
+    type:
+      - "null"
+      - File
+  - id: salmon_index
+    inputBinding:
+      prefix: --salmon_index
+    label: Path to directory or tar.gz archive for pre-built Salmon index.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-bezier-curve
+    type:
+      - "null"
+      - File
+  - id: gencode
+    inputBinding:
+      prefix: --gencode
+    label: Specify if your GTF annotation is in GENCODE format.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-code-branch
+    type:
+      - "null"
+      - boolean
+  - doc: "This behaviour can be modified by specifying `--gtf_extra_attributes` when
+      running the pipeline. Note that you can also specify more than one desired
+      value, separated by a comma e.g. `--gtf_extra_attributes gene_id,...`.
+
+      "
+    id: gtf_extra_attributes
+    inputBinding:
+      prefix: --gtf_extra_attributes
+    label: By default, the pipeline uses the `gene_name` field to obtain additional
+      gene identifiers from the input GTF file when running Salmon.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-plus-square
+    sbg:toolDefaultValue: gene_name
+    type:
+      - "null"
+      - string
+  - id: gtf_group_features
+    inputBinding:
+      prefix: --gtf_group_features
+    label: Define the attribute type used to group features in the GTF file when running
+      Salmon.
+    sbg:category: Reference genome options
+    sbg:icon: fas fa-layer-group
+    sbg:toolDefaultValue: gene_id
+    type:
+      - "null"
+      - string
+  - doc: Do not load `igenomes.config` when running the pipeline. You may choose this
+      option if you observe clashes between custom parameters and those supplied
+      in `igenomes.config`.
+    id: igenomes_ignore
+    inputBinding:
+      prefix: --igenomes_ignore
+    label: Do not load the iGenomes reference config.
+    sbg:category: Reference genome options
+    sbg:hidden: true
+    sbg:icon: fas fa-ban
+    type:
+      - "null"
+      - boolean
+  - id: igenomes_base
+    inputBinding:
+      prefix: --igenomes_base
+    label: The base path to the igenomes reference files
+    sbg:category: Reference genome options
+    sbg:hidden: true
+    sbg:icon: fas fa-ban
+    sbg:toolDefaultValue: s3://ngi-igenomes/igenomes/
+    type:
+      - "null"
+      - Directory
+  - id: trimmer
+    inputBinding:
+      prefix: --trimmer
+    label: Specifies the trimming tool to use - available options are 'trimgalore'
+      and 'fastp'.
+    sbg:category: Read trimming options
+    sbg:icon: fas fa-cut
+    sbg:toolDefaultValue: trimgalore
+    type:
+      - "null"
+      - name: trimmer
+        symbols:
+          - trimgalore
+          - fastp
+        type: enum
+  - id: extra_trimgalore_args
+    inputBinding:
+      prefix: --extra_trimgalore_args
+    label: Extra arguments to pass to Trim Galore! command in addition to defaults
+      defined by the pipeline.
+    sbg:category: Read trimming options
+    sbg:icon: fas fa-plus
+    type:
+      - "null"
+      - string
+  - id: extra_fastp_args
+    inputBinding:
+      prefix: --extra_fastp_args
+    label: Extra arguments to pass to fastp command in addition to defaults defined
+      by the pipeline.
+    sbg:category: Read trimming options
+    sbg:icon: fas fa-plus
+    type:
+      - "null"
+      - string
+  - id: min_trimmed_reads
+    inputBinding:
+      prefix: --min_trimmed_reads
+    label: Minimum number of trimmed reads below which samples are removed from further
+      processing. Some downstream steps in the pipeline will fail if this threshold
+      is too low.
+    sbg:category: Read trimming options
+    sbg:icon: fas fa-hand-paper
+    sbg:toolDefaultValue: 10000
+    type:
+      - "null"
+      - int
+  - id: extra_fqlint_args
+    inputBinding:
+      prefix: --extra_fqlint_args
+    label: Extra arguments to pass to the fq lint command.
+    sbg:category: Read filtering options
+    sbg:icon: far fa-check-square
+    sbg:toolDefaultValue: --disable-validator P001
+    type:
+      - "null"
+      - string
+  - doc: "The file should contain 2 columns: short name and full path to reference\
+      \ genome(s) e.g. \n```\nmm10,/path/to/mm10.fa\necoli,/path/to/ecoli.fa\n```"
+    format: text/plain
+    id: bbsplit_fasta_list
+    inputBinding:
+      prefix: --bbsplit_fasta_list
+    label: Path to comma-separated file containing a list of reference genomes to
+      filter reads against with BBSplit. You have to also explicitly set `--skip_bbsplit
+      false` if you want to use BBSplit.
+    sbg:category: Read filtering options
+    sbg:icon: fas fa-list-alt
+    type:
+      - "null"
+      - File
+  - doc: The BBSplit index will have to be built at least once with this pipeline
+      (see `--save_reference` to save index). It can then be provided via `--bbsplit_index`
+      for future runs.
+    id: bbsplit_index
+    inputBinding:
+      prefix: --bbsplit_index
+    label: Path to directory or tar.gz archive for pre-built BBSplit index.
+    sbg:category: Read filtering options
+    sbg:icon: fas fa-bezier-curve
+    type:
+      - "null"
+      - File
+  - doc: The sortmerna index will have to be built at least once with this pipeline
+      (see `--save_reference` to save index). It can then be provided via `--sortmerna_index`
+      for future runs.
+    id: sortmerna_index
+    inputBinding:
+      prefix: --sortmerna_index
+    label: Path to directory or tar.gz archive for pre-built sortmerna index.
+    sbg:category: Read filtering options
+    sbg:icon: fas fa-bezier-curve
+    type:
+      - "null"
+      - File
+  - doc: Any patterns found in the sequences defined by the '--ribo_database_manifest'
+      parameter will be used.
+    id: remove_ribo_rna
+    inputBinding:
+      prefix: --remove_ribo_rna
+    label: Enable the removal of reads derived from ribosomal RNA using SortMeRNA.
+    sbg:category: Read filtering options
+    sbg:icon: fas fa-trash-alt
+    sbg:toolDefaultValue: true
+    type:
+      - "null"
+      - boolean
+  - doc: "By default, [rRNA databases](https://github.com/biocore/sortmerna/tree/master/data/rRNA_databases)
+      defined in the SortMeRNA GitHub repo are used. You can see an example in the
+      pipeline Github repository in `assets/rrna-default-dbs.txt`.
+
+      Please note that commercial/non-academic entities require [`licensing for
+      SILVA`](https://www.arb-silva.de/silva-license-information) for these default
+      databases."
+    format: text/plain
+    id: ribo_database_manifest
+    inputBinding:
+      prefix: --ribo_database_manifest
+    label: Text file containing paths to fasta files (one per line) that will be used
+      to create the database for SortMeRNA.
+    sbg:category: Read filtering options
+    sbg:icon: fas fa-database
+    sbg:toolDefaultValue: ${projectDir}/assets/rrna-db-defaults.txt
+    type:
+      - "null"
+      - File
+  - id: with_umi
+    inputBinding:
+      prefix: --with_umi
+    label: Enable UMI-based read deduplication.
+    sbg:category: UMI options
+    sbg:icon: fas fa-barcode
+    type:
+      - "null"
+      - boolean
+  - id: umi_dedup_tool
+    inputBinding:
+      prefix: --umi_dedup_tool
+    label: Specifies the tool to use for UMI deduplication - available options are
+      'umitools' and 'umicollapse'.
+    sbg:category: UMI options
+    sbg:icon: fas fa-barcode
+    sbg:toolDefaultValue: umitools
+    type:
+      - "null"
+      - name: umi_dedup_tool
+        symbols:
+          - umitools
+          - umicollapse
+        type: enum
+  - doc:
+      "More details can be found in the [UMI-tools documentation](https://umi-tools.readthedocs.io/en/latest/reference/extract.html#extract-method).
+
+      "
+    id: umitools_extract_method
+    inputBinding:
+      prefix: --umitools_extract_method
+    label: UMI pattern to use. Can be either 'string' (default) or 'regex'.
+    sbg:category: UMI options
+    sbg:icon: fas fa-barcode
+    sbg:toolDefaultValue: string
+    type:
+      - "null"
+      - string
+  - doc: More details can be found in the [UMI-tools documentation](https://umi-tools.readthedocs.io/en/latest/reference/extract.html#extract-method).
+    id: umitools_bc_pattern
+    inputBinding:
+      prefix: --umitools_bc_pattern
+    label: The UMI barcode pattern to use e.g. 'NNNNNN' indicates that the first 6
+      nucleotides of the read are from the UMI.
+    sbg:category: UMI options
+    sbg:icon: fas fa-barcode
+    type:
+      - "null"
+      - string
+  - id: umitools_bc_pattern2
+    inputBinding:
+      prefix: --umitools_bc_pattern2
+    label: The UMI barcode pattern to use if the UMI is located in read 2.
+    sbg:category: UMI options
+    sbg:icon: fas fa-barcode
+    type:
+      - "null"
+      - string
+  - id: umi_discard_read
+    inputBinding:
+      prefix: --umi_discard_read
+    label: After UMI barcode extraction discard either R1 or R2 by setting this parameter
+      to 1 or 2, respectively.
+    sbg:category: UMI options
+    sbg:icon: fas fa-barcode
+    type:
+      - "null"
+      - int
+  - id: umitools_umi_separator
+    inputBinding:
+      prefix: --umitools_umi_separator
+    label: The character that separates the UMI in the read name. Most likely a colon
+      if you skipped the extraction with UMI-tools and used other software.
+    sbg:category: UMI options
+    sbg:icon: fas fa-star-half-alt
+    type:
+      - "null"
+      - string
+  - id: umitools_grouping_method
+    inputBinding:
+      prefix: --umitools_grouping_method
+    label: Method to use to determine read groups by subsuming those with similar
+      UMIs. All methods start by identifying the reads with the same mapping position,
+      but treat similar yet nonidentical UMIs differently.
+    sbg:category: UMI options
+    sbg:icon: far fa-object-ungroup
+    sbg:toolDefaultValue: directional
+    type:
+      - "null"
+      - name: umitools_grouping_method
+        symbols:
+          - unique
+          - percentile
+          - cluster
+          - adjacency
+          - directional
+        type: enum
+  - doc: It can be quite time consuming generating these output stats - see [#827](https://github.com/nf-core/rnaseq/issues/827).
+    id: umitools_dedup_stats
+    inputBinding:
+      prefix: --umitools_dedup_stats
+    label: Generate output stats when running "umi_tools dedup".
+    sbg:category: UMI options
+    sbg:icon: fas fa-barcode
+    type:
+      - "null"
+      - boolean
+  - id: aligner
+    inputBinding:
+      prefix: --aligner
+    label: Specifies the alignment algorithm to use - available options are currently
+      'star'.
+    sbg:category: Alignment options
+    sbg:icon: fas fa-map-signs
+    sbg:toolDefaultValue: star
+    type:
+      - "null"
+      - name: aligner
+        symbols:
+          - star
+        type: enum
+  - doc: Failure to set a good kmer size could cause issues with quantification with
+      Kallisto or Salmon. This is mostly an issue for short reads (<50bp), where
+      the default kmer size of 31 is an problem.
+    id: pseudo_aligner_kmer_size
+    inputBinding:
+      prefix: --pseudo_aligner_kmer_size
+    label: Kmer length passed to indexing step of pseudoaligners
+    sbg:category: Alignment options
+    sbg:icon: fas fa-ruler-horizontal
+    sbg:toolDefaultValue: 31
+    type:
+      - "null"
+      - int
+  - id: bam_csi_index
+    inputBinding:
+      prefix: --bam_csi_index
+    label: Create a CSI index for BAM files instead of the traditional BAI index.
+      This will be required for genomes with larger chromosome sizes.
+    sbg:category: Alignment options
+    sbg:icon: fas fa-sort-alpha-down
+    type:
+      - "null"
+      - boolean
+  - id: star_ignore_sjdbgtf
+    inputBinding:
+      prefix: --star_ignore_sjdbgtf
+    label: When using pre-built STAR indices do not re-extract and use splice junctions
+      from the GTF file.
+    sbg:category: Alignment options
+    sbg:icon: fas fa-ban
+    type:
+      - "null"
+      - boolean
+  - doc: See [Salmon docs](https://salmon.readthedocs.io/en/latest/library_type.html).
+    id: salmon_quant_libtype
+    inputBinding:
+      prefix: --salmon_quant_libtype
+    label: " Override Salmon library type inferred based on strandedness defined in
+      meta object."
+    sbg:category: Alignment options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - name: salmon_quant_libtype
+        symbols:
+          - A
+          - IS
+          - ISF
+          - ISR
+          - IU
+          - MS
+          - MSF
+          - MSR
+          - MU
+          - OS
+          - OSF
+          - OSR
+          - OU
+          - SF
+          - SR
+          - U
+        type: enum
+  - doc: Some downstream steps in the pipeline will fail if this threshold is too
+      low.
+    id: min_mapped_reads
+    inputBinding:
+      prefix: --min_mapped_reads
+    label: Minimum percentage of uniquely mapped reads below which samples are removed
+      from further processing.
+    sbg:category: Alignment options
+    sbg:icon: fas fa-percentage
+    sbg:toolDefaultValue: 5.0
+    type:
+      - "null"
+      - float
+  - id: seq_center
+    inputBinding:
+      prefix: --seq_center
+    label: Sequencing center information to be added to read group of BAM files.
+    sbg:category: Alignment options
+    sbg:icon: fas fa-synagogue
+    type:
+      - "null"
+      - string
+  - id: extra_star_align_args
+    inputBinding:
+      prefix: --extra_star_align_args
+    label: Extra arguments to pass to STAR alignment command in addition to defaults
+      defined by the pipeline. Only available for the STAR-Salmon route.
+    sbg:category: Alignment options
+    sbg:icon: fas fa-plus
+    type:
+      - "null"
+      - string
+  - id: extra_salmon_quant_args
+    inputBinding:
+      prefix: --extra_salmon_quant_args
+    label: Extra arguments to pass to Salmon quant command in addition to defaults
+      defined by the pipeline.
+    sbg:category: Alignment options
+    sbg:icon: fas fa-plus
+    type:
+      - "null"
+      - string
+  - id: stranded_threshold
+    inputBinding:
+      prefix: --stranded_threshold
+    label: The fraction of stranded reads that must be assigned to a strandedness
+      for confident assignment. Must be at least 0.5.
+    sbg:category: Alignment options
+    sbg:toolDefaultValue: 0.8
+    type:
+      - "null"
+      - float
+  - id: unstranded_threshold
+    inputBinding:
+      prefix: --unstranded_threshold
+    label: The difference in fraction of stranded reads assigned to 'forward' and
+      'reverse' below which a sample is classified as 'unstranded'. By default the
+      forward and reverse fractions must differ by less than 0.1 for the sample
+      to be called as unstranded.
+    sbg:category: Alignment options
+    sbg:toolDefaultValue: 0.1
+    type:
+      - "null"
+      - float
+  - id: extra_ribotish_quality_args
+    inputBinding:
+      prefix: --extra_ribotish_quality_args
+    label: Extra arguments to pass to the ribotish quality command in addition to
+      defaults defined by the pipeline.
+    sbg:category: Riboseq-specific options
+    type:
+      - "null"
+      - string
+  - id: extra_ribotish_predict_args
+    inputBinding:
+      prefix: --extra_ribotish_predict_args
+    label: Extra arguments to pass to the ribotish predict command in addition to
+      defaults defined by the pipeline.
+    sbg:category: Riboseq-specific options
+    type:
+      - "null"
+      - string
+  - id: extra_ribotricer_prepareorfs_args
+    inputBinding:
+      prefix: --extra_ribotricer_prepareorfs_args
+    label: Extra arguments to pass to the ribotricer prepare-orfs command in addition
+      to defaults defined by the pipeline.
+    sbg:category: Riboseq-specific options
+    type:
+      - "null"
+      - string
+  - id: extra_ribotricer_detectorfs_args
+    inputBinding:
+      prefix: --extra_ribotricer_detectorfs_args
+    label: Extra arguments to pass to the ribotricer detect-orfs command in addition
+      to defaults defined by the pipeline.
+    sbg:category: Riboseq-specific options
+    type:
+      - "null"
+      - string
+  - id: extra_anota2seq_run_args
+    inputBinding:
+      prefix: --extra_anota2seq_run_args
+    label: Extra arguments to pass to anota2seq in addition to defaults defined by
+      the pipeline.
+    sbg:category: Riboseq-specific options
+    type:
+      - "null"
+      - string
+  - id: save_merged_fastq
+    inputBinding:
+      prefix: --save_merged_fastq
+    label: Save FastQ files after merging re-sequenced libraries in the results directory.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    type:
+      - "null"
+      - boolean
+  - id: save_umi_intermeds
+    inputBinding:
+      prefix: --save_umi_intermeds
+    label: If this option is specified, intermediate FastQ and BAM files produced
+      by UMI-tools are also saved in the results directory.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    type:
+      - "null"
+      - boolean
+  - id: save_non_ribo_reads
+    inputBinding:
+      prefix: --save_non_ribo_reads
+    label: If this option is specified, intermediate FastQ files containing non-rRNA
+      reads will be saved in the results directory.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    type:
+      - "null"
+      - boolean
+  - id: save_bbsplit_reads
+    inputBinding:
+      prefix: --save_bbsplit_reads
+    label: If this option is specified, FastQ files split by reference will be saved
+      in the results directory.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    type:
+      - "null"
+      - boolean
+  - doc: If an alignment index is generated by the pipeline use this parameter to
+      save it to your results folder. These can then be used for future pipeline
+      runs, reducing processing times.
+    id: save_reference
+    inputBinding:
+      prefix: --save_reference
+    label: If generated by the pipeline save the STAR index in the results directory.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    type:
+      - "null"
+      - boolean
+  - doc: By default, trimmed FastQ files will not be saved to the results directory.
+      Specify this flag (or set to true in your config file) to copy these files
+      to the results directory when complete.
+    id: save_trimmed
+    inputBinding:
+      prefix: --save_trimmed
+    label: Save the trimmed FastQ files in the results directory.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    type:
+      - "null"
+      - boolean
+  - doc: By default, intermediate BAM files will not be saved. The final BAM files
+      created after the appropriate filtering step are always saved to limit storage
+      usage. Set this parameter to also save other intermediate BAM files.
+    id: save_align_intermeds
+    inputBinding:
+      prefix: --save_align_intermeds
+    label: Save the intermediate BAM files from the alignment step.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    sbg:toolDefaultValue: true
+    type:
+      - "null"
+      - boolean
+  - doc: This may either be in the form of FastQ or BAM files depending on the options
+      available for that particular tool.
+    id: save_unaligned
+    inputBinding:
+      prefix: --save_unaligned
+    label: Where possible, save unaligned reads from either STAR, HISAT2 or Salmon
+      to the results directory.
+    sbg:category: Optional outputs
+    sbg:icon: fas fa-save
+    type:
+      - "null"
+      - boolean
+  - doc: If you're confident on the validity of the GTF with respect to the genome
+      fasta file, or wish to disregard failures thriggered by the filtering module,
+      activate this option.
+    id: skip_gtf_filter
+    inputBinding:
+      prefix: --skip_gtf_filter
+    label: Skip filtering of GTF for valid scaffolds and/ or transcript IDs.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_gtf_transcript_filter
+    inputBinding:
+      prefix: --skip_gtf_transcript_filter
+    label: Skip the 'transcript_id' checking component of the GTF filtering script
+      used in the pipeline.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_bbsplit
+    inputBinding:
+      prefix: --skip_bbsplit
+    label: Skip BBSplit for removal of non-reference genome reads.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    sbg:toolDefaultValue: true
+    type:
+      - "null"
+      - boolean
+  - id: skip_umi_extract
+    inputBinding:
+      prefix: --skip_umi_extract
+    label: Skip the UMI extraction from the read in case the UMIs have been moved
+      to the headers in advance of the pipeline run.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-compress-alt
+    type:
+      - "null"
+      - boolean
+  - id: skip_linting
+    inputBinding:
+      prefix: --skip_linting
+    label: Skip linting checks during FASTQ preprocessing and filtering.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - doc: Use this if your input FastQ files have already been trimmed outside of the
+      workflow or if you're very confident that there is no adapter contamination
+      in your data.
+    id: skip_trimming
+    inputBinding:
+      prefix: --skip_trimming
+    label: Skip the adapter trimming step.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_alignment
+    inputBinding:
+      prefix: --skip_alignment
+    label: Skip all of the alignment-based processes within the pipeline.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_markduplicates
+    inputBinding:
+      prefix: --skip_markduplicates
+    label: Skip picard MarkDuplicates step.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_fastqc
+    inputBinding:
+      prefix: --skip_fastqc
+    label: Skip FastQC.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_multiqc
+    inputBinding:
+      prefix: --skip_multiqc
+    label: Skip MultiQC.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_qc
+    inputBinding:
+      prefix: --skip_qc
+    label: Skip all QC steps except for MultiQC.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_ribotish
+    inputBinding:
+      prefix: --skip_ribotish
+    label: Skip Ribo-TISH.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: skip_ribotricer
+    inputBinding:
+      prefix: --skip_ribotricer
+    label: Skip Riboricer.
+    sbg:category: Process skipping options
+    sbg:icon: fas fa-fast-forward
+    type:
+      - "null"
+      - boolean
+  - id: custom_config_version
+    inputBinding:
+      prefix: --custom_config_version
+    label: Git commit id for Institutional configs.
+    sbg:category: Institutional config options
+    sbg:hidden: true
+    sbg:icon: fas fa-users-cog
+    sbg:toolDefaultValue: master
+    type:
+      - "null"
+      - string
+  - doc: If you're running offline, Nextflow will not be able to fetch the institutional
+      config files from the internet. If you don't need them, then this is not a
+      problem. If you do need them, you should download the files from the repo
+      and tell Nextflow where to find them with this parameter.
+    id: custom_config_base
+    inputBinding:
+      prefix: --custom_config_base
+    label: Base directory for Institutional configs.
+    sbg:category: Institutional config options
+    sbg:hidden: true
+    sbg:icon: fas fa-users-cog
+    sbg:toolDefaultValue: https://raw.githubusercontent.com/nf-core/configs/master
+    type:
+      - "null"
+      - string
+  - id: config_profile_name
+    inputBinding:
+      prefix: --config_profile_name
+    label: Institutional config name.
+    sbg:category: Institutional config options
+    sbg:hidden: true
+    sbg:icon: fas fa-users-cog
+    type:
+      - "null"
+      - string
+  - id: config_profile_description
+    inputBinding:
+      prefix: --config_profile_description
+    label: Institutional config description.
+    sbg:category: Institutional config options
+    sbg:hidden: true
+    sbg:icon: fas fa-users-cog
+    type:
+      - "null"
+      - string
+  - id: config_profile_contact
+    inputBinding:
+      prefix: --config_profile_contact
+    label: Institutional config contact information.
+    sbg:category: Institutional config options
+    sbg:hidden: true
+    sbg:icon: fas fa-users-cog
+    type:
+      - "null"
+      - string
+  - id: config_profile_url
+    inputBinding:
+      prefix: --config_profile_url
+    label: Institutional config URL link.
+    sbg:category: Institutional config options
+    sbg:hidden: true
+    sbg:icon: fas fa-users-cog
+    type:
+      - "null"
+      - string
+  - doc: "Warning: The `-profile test` samplesheet file itself contains remote paths.
+      Setting this parameter does not alter the contents of that file."
+    id: test_data_base
+    inputBinding:
+      prefix: --test_data_base
+    label: Base path / URL for data used in the test profiles
+    sbg:category: Institutional config options
+    sbg:hidden: true
+    sbg:toolDefaultValue: https://raw.githubusercontent.com/nf-core/test-datasets/riboseq/testdata/
+    type:
+      - "null"
+      - string
+  - id: version
+    inputBinding:
+      prefix: --version
+    label: Display version and exit.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-question-circle
+    type:
+      - "null"
+      - boolean
+  - doc: The Nextflow `publishDir` option specifies which intermediate files should
+      be saved to the output directory. This option tells the pipeline what method
+      should be used to move these files. See [Nextflow docs](https://www.nextflow.io/docs/latest/process.html#publishdir)
+      for details.
+    id: publish_dir_mode
+    inputBinding:
+      prefix: --publish_dir_mode
+    label: Method used to save pipeline results to output directory.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-copy
+    sbg:toolDefaultValue: copy
+    type:
+      - "null"
+      - name: publish_dir_mode
+        symbols:
+          - symlink
+          - rellink
+          - link
+          - copy
+          - copyNoFollow
+          - move
+        type: enum
+  - doc: An email address to send a summary email to when the pipeline is completed
+      - ONLY sent if the pipeline does not exit successfully.
+    id: email_on_fail
+    inputBinding:
+      prefix: --email_on_fail
+    label: Email address for completion summary, only when pipeline fails.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-exclamation-triangle
+    sbg:pattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    type:
+      - "null"
+      - string
+  - id: plaintext_email
+    inputBinding:
+      prefix: --plaintext_email
+    label: Send plain-text email instead of HTML.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-remove-format
+    type:
+      - "null"
+      - boolean
+  - id: max_multiqc_email_size
+    inputBinding:
+      prefix: --max_multiqc_email_size
+    label: File size limit when attaching MultiQC reports to summary emails.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-file-upload
+    sbg:toolDefaultValue: 25.MB
+    type:
+      - "null"
+      - string
+  - id: monochrome_logs
+    inputBinding:
+      prefix: --monochrome_logs
+    label: Do not use coloured log outputs.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-palette
+    type:
+      - "null"
+      - boolean
+  - doc: Incoming hook URL for messaging service. Currently, MS Teams and Slack are
+      supported.
+    id: hook_url
+    inputBinding:
+      prefix: --hook_url
+    label: Incoming hook URL for messaging service
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-people-group
+    type:
+      - "null"
+      - string
+  - format: text/plain
+    id: multiqc_config
+    inputBinding:
+      prefix: --multiqc_config
+    label: Custom config file to supply to MultiQC.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-cog
+    type:
+      - "null"
+      - File
+  - format: text/plain
+    id: multiqc_logo
+    inputBinding:
+      prefix: --multiqc_logo
+    label: Custom logo file to supply to MultiQC. File name must also be set in the
+      MultiQC config file
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-image
+    type:
+      - "null"
+      - File
+  - format: text/plain
+    id: multiqc_methods_description
+    inputBinding:
+      prefix: --multiqc_methods_description
+    label: Custom MultiQC yaml file containing HTML including a methods description.
+    sbg:category: Generic options
+    sbg:icon: fas fa-cog
+    type:
+      - "null"
+      - File
+  - id: validate_params
+    inputBinding:
+      prefix: --validate_params
+    label: Boolean whether to validate parameters against the schema at runtime
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: fas fa-check-square
+    sbg:toolDefaultValue: true
+    type:
+      - "null"
+      - boolean
+  - id: pipelines_testdata_base_path
+    inputBinding:
+      prefix: --pipelines_testdata_base_path
+    label: Base URL or local path to location of pipeline test dataset files
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: far fa-check-circle
+    sbg:toolDefaultValue: https://raw.githubusercontent.com/nf-core/test-datasets/
+    type:
+      - "null"
+      - string
+  - id: trace_report_suffix
+    inputBinding:
+      prefix: --trace_report_suffix
+    label: Suffix to add to the trace report filename. Default is the date and time
+      in the format yyyy-MM-dd_HH-mm-ss.
+    sbg:category: Generic options
+    sbg:hidden: true
+    sbg:icon: far calendar
+    type:
+      - "null"
+      - string
+  - doc: List of files not added as explicit workflow inputs but required for workflow
+      execution.
+    id: auxiliary_files
+    label: Auxiliary files
+    type:
+      - "null"
+      - items: File
+        type: array
+  - doc: Provide parameters through a JSON format input file.
+    id: params_file
+    inputBinding:
+      prefix: -params-file
+    label: Params files
+    sbg:fileTypes: JSON
+    type:
+      - "null"
+      - File
+outputs:
+  - id: reports
+    label: reports
+    type:
+      - "null"
+      - fields:
+          - label: MultiQC HTML report
+            name: multiqc_html_report
+            outputBinding:
+              glob: multiqc_report.html
+            type:
+              - "null"
+              - items: File
+                type: array
+          - label: Auto-created samplesheet with collated metadata and FASTQ paths
+            name: autocreated_samplesheet_with_collated_metadata_and_fastq_paths
+            outputBinding:
+              glob: samplesheet.csv
+            type:
+              - "null"
+              - items: File
+                type: array
+        name: reports
+        type: record
+  - doc: This is a template output. You can modify the glob pattern to make outputs
+      more specific.
+    id: nf_publishdir
+    label: Publish Directory
+    outputBinding:
+      glob: $(inputs.outdir)
+    type: Directory
+requirements:
+  - class: InlineJavascriptRequirement
+sbg:links:
+  - id: https://github.com/nf-core/riboseq
+    label: Home Page
+sbg:toolAuthor: The author field is deprecated from Nextflow
+  version 24.10.0, use contributors instead'
