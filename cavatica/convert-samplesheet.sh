@@ -4,7 +4,7 @@ set -euo pipefail
 # Script to convert local file paths in samplesheet to Cavatica vs:// paths
 # Usage: ./convert-samplesheet.sh <input_samplesheet.csv> <output_samplesheet.csv>
 
-project_id="chaodi/cruz-scrnaseq"
+project_id="chaodi/cruz-riboseq"
 input_sheet="${1:-samplesheet.csv}"
 output_file="${2:-samplesheet_cavatica.csv}"
 
