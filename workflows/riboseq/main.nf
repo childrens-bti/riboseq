@@ -23,6 +23,13 @@ include { DESEQ2_DELTATE as DESEQ2_DELTATE_ORF } from '../../modules/local/deseq
 include { ANOTA2SEQ_ANOTA2SEQRUN as ANOTA2SEQ_ANOTA2SEQRUN_ORF } from '../../modules/nf-core/anota2seq/anota2seqrun'
 include { DOTSEQ_DOTSEQ as DOTSEQ_DOTSEQ_ORF } from '../../modules/nf-core/dotseq/dotseq'
 include { GAWK as FILTER_COUNTS_CANONICAL                      } from '../../modules/nf-core/gawk'
+include { BAM_TO_CRAM as BAM_TO_CRAM_GENOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_TRANSCRIPTOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_HYBRID_GENOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_HYBRID_TRANSCRIPTOME } from '../../modules/local/bam_to_cram_validate'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_GENOME } from '../../modules/local/publish_cram_reference'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_TRANSCRIPTOME } from '../../modules/local/publish_cram_reference'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_HYBRID_TRANSCRIPTOME } from '../../modules/local/publish_cram_reference'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -251,6 +258,7 @@ workflow RIBOSEQ {
     ch_genome_bam              = FASTQ_ALIGN_STAR.out.bam
     ch_genome_bam_index        = FASTQ_ALIGN_STAR.out.index
     ch_transcriptome_bam       = FASTQ_ALIGN_STAR.out.orig_bam_transcript
+    ch_transcriptome_bam_for_cram = FASTQ_ALIGN_STAR.out.bam_transcript
     ch_transcriptome_bai       = FASTQ_ALIGN_STAR.out.index_transcript
 
     ch_multiqc_files = ch_multiqc_files
@@ -277,10 +285,29 @@ workflow RIBOSEQ {
 
         ch_genome_bam        = BAM_DEDUP_UMI.out.bam
         ch_transcriptome_bam = BAM_DEDUP_UMI.out.transcriptome_bam
+        ch_transcriptome_bam_for_cram = BAM_DEDUP_UMI.out.transcriptome_dedup_bam
         ch_genome_bam_index  = BAM_DEDUP_UMI.out.index
 
         ch_multiqc_files = ch_multiqc_files
             .mix(BAM_DEDUP_UMI.out.multiqc_files.map { _meta, file -> file })
+    }
+
+    // Archive the final alignment channels as CRAMs. BAMs remain in
+    // the Nextflow work directory for downstream tools, but are not published
+    // in the default CRAM mode.
+    if (params.alignment_output_format == 'cram') {
+        PUBLISH_CRAM_REFERENCE_GENOME(ch_fasta)
+        PUBLISH_CRAM_REFERENCE_TRANSCRIPTOME(ch_transcript_fasta)
+
+        BAM_TO_CRAM_GENOME(
+            ch_genome_bam,
+            ch_fasta
+        )
+
+        BAM_TO_CRAM_TRANSCRIPTOME(
+            ch_transcriptome_bam_for_cram,
+            ch_transcript_fasta
+        )
     }
 
     //
@@ -372,6 +399,7 @@ workflow RIBOSEQ {
     def orf_catalogue_active = (params.extended_orf_analysis && enabled_orf_callers) as boolean
 
     ch_hybrid_transcriptome_bam = channel.empty()
+    ch_hybrid_transcriptome_bam_for_cram = channel.empty()
 
     if (extended_orf_active) {
         EXTENDED_ORF_SECOND_PASS_ALIGN(
@@ -381,7 +409,9 @@ workflow RIBOSEQ {
             params.star_ignore_sjdbgtf
         )
 
+        ch_hybrid_genome_bam        = EXTENDED_ORF_SECOND_PASS_ALIGN.out.genome_bam
         ch_hybrid_transcriptome_bam = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam
+        ch_hybrid_transcriptome_bam_for_cram = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam_sorted
         ch_multiqc_files            = ch_multiqc_files.mix(EXTENDED_ORF_SECOND_PASS_ALIGN.out.multiqc_files)
 
         // Deduplicate the hybrid transcriptome BAM with the same UMI subworkflow
@@ -399,7 +429,23 @@ workflow RIBOSEQ {
                 EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcript_fasta.map { [ [:], it, [] ] },
                 params.umitools_dedup_primary_only
             )
+            ch_hybrid_genome_bam        = BAM_DEDUP_UMI_HYBRID.out.bam
             ch_hybrid_transcriptome_bam = BAM_DEDUP_UMI_HYBRID.out.transcriptome_bam
+            ch_hybrid_transcriptome_bam_for_cram = BAM_DEDUP_UMI_HYBRID.out.transcriptome_dedup_bam
+        }
+
+        if (params.alignment_output_format == 'cram') {
+            PUBLISH_CRAM_REFERENCE_HYBRID_TRANSCRIPTOME(
+                EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcript_fasta
+            )
+            BAM_TO_CRAM_HYBRID_GENOME(
+                ch_hybrid_genome_bam,
+                ch_fasta
+            )
+            BAM_TO_CRAM_HYBRID_TRANSCRIPTOME(
+                ch_hybrid_transcriptome_bam_for_cram,
+                EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcript_fasta
+            )
         }
     }
 

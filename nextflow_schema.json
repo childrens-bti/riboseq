@@ -439,6 +439,18 @@
                     "description": "Extra arguments to pass to STAR alignment command in addition to defaults defined by the pipeline. Only available for the STAR-Salmon route.",
                     "fa_icon": "fas fa-plus"
                 },
+                "extra_star_riboseq_align_args": {
+                    "type": "string",
+                    "description": "Extra arguments to pass to STAR only for Ribo-seq samples, including the hybrid Ribo-seq alignment pass.",
+                    "fa_icon": "fas fa-plus"
+                },
+                "alignment_output_format": {
+                    "type": "string",
+                    "enum": ["cram", "bam"],
+                    "default": "cram",
+                    "description": "Published final alignment format. CRAM publishes validated CRAM/CRAI files and the exact decoding references; BAM preserves the legacy publication layout.",
+                    "fa_icon": "fas fa-file-archive"
+                },
                 "extra_salmon_quant_args": {
                     "type": "string",
                     "description": "Extra arguments to pass to Salmon quant command in addition to defaults defined by the pipeline.",

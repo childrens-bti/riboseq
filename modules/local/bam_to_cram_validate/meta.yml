@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: bam_to_cram
+description: Convert a BAM to reference-based CRAM and create its index
+keywords: [bam, cram, samtools]
+tools:
+  - samtools:
+      description: Tools for manipulating next-generation sequencing data
+      homepage: https://www.htslib.org/
+      licence: ["MIT"]
+input:
+  - - meta:
+        type: map
+        description: Sample metadata
+    - bam:
+        type: file
+        description: Input BAM
+        pattern: "*.bam"
+  - - fasta:
+        type: file
+        description: Exact reference FASTA for the alignment
+        pattern: "*.{fa,fasta,fna}"
+output:
+  cram:
+    - - meta:
+          type: map
+          description: Sample metadata
+      - "*.cram":
+          type: file
+          description: CRAM alignment
+      - "*.cram.crai":
+          type: file
+          description: CRAM index
