@@ -24,6 +24,13 @@ include { DESEQ2_DELTATE as DESEQ2_DELTATE_ORF } from '../../modules/local/deseq
 include { ANOTA2SEQ_ANOTA2SEQRUN as ANOTA2SEQ_ANOTA2SEQRUN_ORF } from '../../modules/nf-core/anota2seq/anota2seqrun'
 include { DOTSEQ_DOTSEQ as DOTSEQ_DOTSEQ_ORF } from '../../modules/nf-core/dotseq/dotseq'
 include { GAWK as FILTER_COUNTS_CANONICAL                      } from '../../modules/nf-core/gawk'
+include { BAM_TO_CRAM as BAM_TO_CRAM_GENOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_TRANSCRIPTOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_HYBRID_GENOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_HYBRID_TRANSCRIPTOME } from '../../modules/local/bam_to_cram_validate'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_GENOME } from '../../modules/local/publish_cram_reference'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_TRANSCRIPTOME } from '../../modules/local/publish_cram_reference'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_HYBRID_TRANSCRIPTOME } from '../../modules/local/publish_cram_reference'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -297,6 +304,7 @@ workflow RIBOSEQ {
     ch_genome_bam              = FASTQ_ALIGN_STAR.out.bam
     ch_genome_bam_index        = FASTQ_ALIGN_STAR.out.index
     ch_transcriptome_bam       = FASTQ_ALIGN_STAR.out.orig_bam_transcript
+    ch_transcriptome_bam_for_cram = FASTQ_ALIGN_STAR.out.bam_transcript
 
     ch_multiqc_files = ch_multiqc_files
         .mix(FASTQ_ALIGN_STAR.out.stats
@@ -319,6 +327,7 @@ workflow RIBOSEQ {
         ch_genome_bam_without_umi        = ch_genome_bam.filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
         ch_genome_bam_index_without_umi  = ch_genome_bam_index.filter { meta, _index -> !umi_sample_ids.contains(meta.id) }
         ch_transcriptome_bam_without_umi = ch_transcriptome_bam.filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
+        ch_transcriptome_bam_for_cram_without_umi = ch_transcriptome_bam_for_cram.filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
 
         BAM_DEDUP_UMI(
             ch_genome_bam
@@ -334,10 +343,21 @@ workflow RIBOSEQ {
 
         ch_genome_bam        = BAM_DEDUP_UMI.out.bam.mix(ch_genome_bam_without_umi)
         ch_transcriptome_bam = BAM_DEDUP_UMI.out.transcriptome_bam.mix(ch_transcriptome_bam_without_umi)
+        ch_transcriptome_bam_for_cram = BAM_DEDUP_UMI.out.transcriptome_dedup_bam.mix(ch_transcriptome_bam_for_cram_without_umi)
         ch_genome_bam_index  = BAM_DEDUP_UMI.out.index.mix(ch_genome_bam_index_without_umi)
 
         ch_multiqc_files = ch_multiqc_files
             .mix(BAM_DEDUP_UMI.out.multiqc_files.map { _meta, file -> file })
+    }
+
+    if (params.alignment_output_format == 'cram') {
+        // Each reference must be a value channel to reach every sample.
+        ch_cram_genome_fasta = ch_fasta_fai.map { _meta, fasta, _fai -> fasta }
+        ch_cram_transcript_fasta = ch_transcript_fasta
+        PUBLISH_CRAM_REFERENCE_GENOME(ch_cram_genome_fasta)
+        PUBLISH_CRAM_REFERENCE_TRANSCRIPTOME(ch_cram_transcript_fasta)
+        BAM_TO_CRAM_GENOME(ch_genome_bam, ch_cram_genome_fasta)
+        BAM_TO_CRAM_TRANSCRIPTOME(ch_transcriptome_bam_for_cram, ch_cram_transcript_fasta)
     }
 
     //
@@ -439,6 +459,8 @@ workflow RIBOSEQ {
         )
 
         ch_hybrid_transcriptome_bam = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam
+        ch_hybrid_genome_bam_for_cram = EXTENDED_ORF_SECOND_PASS_ALIGN.out.genome_bam
+        ch_hybrid_transcriptome_bam_for_cram = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam_sorted
         ch_multiqc_files            = ch_multiqc_files.mix(EXTENDED_ORF_SECOND_PASS_ALIGN.out.multiqc_files)
 
         // Deduplicate the hybrid transcriptome BAM with the same UMI subworkflow
@@ -448,6 +470,10 @@ workflow RIBOSEQ {
         // identical to the primary path.
         if (umi_sample_ids) {
             ch_hybrid_transcriptome_bam_without_umi = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam
+                .filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
+            ch_hybrid_genome_bam_for_cram_without_umi = ch_hybrid_genome_bam_for_cram
+                .filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
+            ch_hybrid_transcriptome_bam_for_cram_without_umi = ch_hybrid_transcriptome_bam_for_cram
                 .filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
 
             BAM_DEDUP_UMI_HYBRID(
@@ -463,6 +489,17 @@ workflow RIBOSEQ {
             )
             ch_hybrid_transcriptome_bam = BAM_DEDUP_UMI_HYBRID.out.transcriptome_bam
                 .mix(ch_hybrid_transcriptome_bam_without_umi)
+            ch_hybrid_genome_bam_for_cram = BAM_DEDUP_UMI_HYBRID.out.bam
+                .mix(ch_hybrid_genome_bam_for_cram_without_umi)
+            ch_hybrid_transcriptome_bam_for_cram = BAM_DEDUP_UMI_HYBRID.out.transcriptome_dedup_bam
+                .mix(ch_hybrid_transcriptome_bam_for_cram_without_umi)
+        }
+
+        if (params.alignment_output_format == 'cram') {
+            ch_cram_hybrid_transcript_fasta = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcript_fasta
+            PUBLISH_CRAM_REFERENCE_HYBRID_TRANSCRIPTOME(ch_cram_hybrid_transcript_fasta)
+            BAM_TO_CRAM_HYBRID_GENOME(ch_hybrid_genome_bam_for_cram, ch_cram_genome_fasta)
+            BAM_TO_CRAM_HYBRID_TRANSCRIPTOME(ch_hybrid_transcriptome_bam_for_cram, ch_cram_hybrid_transcript_fasta)
         }
     }
 

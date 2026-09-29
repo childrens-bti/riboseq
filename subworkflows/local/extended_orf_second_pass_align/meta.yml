@@ -31,6 +31,9 @@ output:
   - transcriptome_bam:
       description: Hybrid transcriptome-coordinate BAM for Ribo-seq samples
       pattern: "*.toTranscriptome.out.bam"
+  - transcriptome_bam_sorted:
+      description: Coordinate-sorted hybrid transcriptome BAM for CRAM conversion
+      pattern: "*.bam"
   - multiqc_files:
       description: STAR stats / flagstat / idxstats / log_final files for MultiQC
       pattern: "*"

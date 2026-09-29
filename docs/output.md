@@ -266,13 +266,13 @@ When `--ribo_removal_tool ribodetector` is specified, the pipeline uses [RiboDet
 <summary>Output files</summary>
 
 - `alignment/star/original`
-  - `*.Aligned.out.bam`: If `--save_align_intermeds` is specified the original BAM file containing read alignments to the reference genome will be placed in this directory.
-  - `*.Aligned.toTranscriptome.out.bam`: If `--save_align_intermeds` is specified the original BAM file containing read alignments to the transcriptome will be placed in this directory.
+  - `*.Aligned.out.bam` and `*.Aligned.toTranscriptome.out.bam`: Original STAR BAMs, published with `--alignment_output_format bam --save_align_intermeds`.
 - `alignment/star/sorted`
-  - `*.genome.sorted.bam`: Coordinate-sorted genome BAM file for each sample
-  - `*.genome.sorted.bam.bai`: Index for coordinate-sorted genome BAM file for each sample
-  - `*.transcriptome.sorted.bam`: Coordinate-sorted transcriptome BAM file for each sample
-  - `*.transcriptome.sorted.bam.bai`: Index for coordinate-sorted transcriptome BAM file for each sample
+  - `*.genome.sorted.cram` and `*.genome.sorted.cram.crai`: Final genome CRAM and index for each sample in the default CRAM mode.
+  - `*.transcriptome.sorted.cram` and `*.transcriptome.sorted.cram.crai`: Final transcriptome CRAM and index for each sample in the default CRAM mode.
+  - With `--alignment_output_format bam`, the release's BAM and BAI files are published instead.
+- `genome/cram_reference/`
+  - `genome.fasta`, `genome.fasta.fai`, `transcriptome.fasta`, `transcriptome.fasta.fai`, and their `.reference.sha256` manifests: Exact decoding references for the primary CRAMs.
 - `alignment/star/log/`
   - `*.SJ.out.tab`: File containing filtered splice junctions detected after mapping the reads.
   - `*.Log.final.out`: STAR alignment report containing the mapping results summary.
@@ -415,13 +415,14 @@ The second pass runs only on Ribo-seq samples (RNA-seq and TI-seq do not feed Ri
 <summary>Output files</summary>
 
 - `alignment/hybrid_star/`
-  - `hybrid_transcriptome.fasta`: Spliced transcript sequences extracted from the hybrid GTF (only published when `--save_reference` is set).
-  - `original/`: Original (unsorted) hybrid genome and transcriptome BAMs from STAR (only published when `--save_align_intermeds` is set).
-  - `sorted/`: Coordinate-sorted hybrid BAMs and their indices (only published when `--save_align_intermeds` is set).
+  - `hybrid_transcriptome.fasta`: Spliced transcript sequences extracted from the hybrid GTF (published when `--save_reference` is set).
+  - `original/`: Original STAR BAMs, published with `--alignment_output_format bam --save_align_intermeds`.
+  - `sorted/`: Coordinate-sorted hybrid CRAMs and CRAI indices in the default CRAM mode; the release's BAMs and indices with `--alignment_output_format bam --save_align_intermeds`.
+  - `cram_reference/`: Exact hybrid transcriptome FASTA, FAI, and SHA-256 manifest needed to decode hybrid transcriptome CRAMs.
   - `sorted/samtools_stats/`: `samtools stats`, `flagstat`, `idxstats` for the hybrid alignments.
   - `log/`: STAR log files (`*.Log.final.out`, `*.Log.out`, `*.Log.progress.out`, `*.SJ.out.tab`) for the hybrid pass.
   - `unmapped/`: Unmapped reads from the hybrid pass (only published when `--save_unaligned` is set).
-  - `deduplicated/`: UMI-deduplicated hybrid BAMs, indices and dedup logs (only published when `--save_align_intermeds` or `--save_umi_intermeds` is set).
+  - `deduplicated/`: UMI dedup logs with `--save_align_intermeds` or `--save_umi_intermeds`; intermediate BAMs and indices are published only in BAM mode.
 - `genome/index/hybrid_star/star/`
   - Hybrid STAR index (only published when `--save_reference` is set).
 

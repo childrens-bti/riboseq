@@ -439,6 +439,18 @@
                     "description": "Extra arguments to pass to STAR alignment command in addition to defaults defined by the pipeline. Only available for the STAR-Salmon route.",
                     "fa_icon": "fas fa-plus"
                 },
+                "extra_star_riboseq_align_args": {
+                    "type": "string",
+                    "description": "Extra arguments to pass to STAR only for Ribo-seq samples, including the hybrid Ribo-seq alignment pass.",
+                    "fa_icon": "fas fa-plus"
+                },
+                "alignment_output_format": {
+                    "type": "string",
+                    "enum": ["cram", "bam"],
+                    "default": "cram",
+                    "description": "Published final alignment format. CRAM publishes CRAM/CRAI files with their exact decoding references; BAM preserves the release publication layout.",
+                    "fa_icon": "fas fa-file-archive"
+                },
                 "extra_salmon_quant_args": {
                     "type": "string",
                     "description": "Extra arguments to pass to Salmon quant command in addition to defaults defined by the pipeline.",
@@ -637,7 +649,7 @@
                 "save_umi_intermeds": {
                     "type": "boolean",
                     "fa_icon": "fas fa-save",
-                    "description": "If this option is specified, intermediate FastQ and BAM files produced by UMI-tools are also saved in the results directory."
+                    "description": "Save intermediate UMI FastQ files and logs. Intermediate BAMs are published only in BAM output mode."
                 },
                 "save_non_ribo_reads": {
                     "type": "boolean",
@@ -663,8 +675,8 @@
                 },
                 "save_align_intermeds": {
                     "type": "boolean",
-                    "description": "Save the intermediate BAM files from the alignment step.",
-                    "help_text": "By default, intermediate BAM files will not be saved. The final BAM files created after the appropriate filtering step are always saved to limit storage usage. Set this parameter to also save other intermediate BAM files.",
+                    "description": "Save intermediate alignment BAMs in BAM output mode.",
+                    "help_text": "Final CRAMs are always published in CRAM mode. In BAM mode, this parameter retains the release's intermediate BAM publication behavior.",
                     "fa_icon": "fas fa-save",
                     "default": true
                 },
