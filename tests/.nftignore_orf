@@ -111,6 +111,7 @@ quantification/salmon_hybrid/*.rds
 quantification/salmon_hybrid/**/*.rds
 quantification/salmon_hybrid/salmon.merged.hybrid.*.tsv
 quantification/inframe_psite/*
+orf_predictions/catalogue/summary/**
 riboseq_qc/ribotish/*_qual.pdf
 psites/ribowaltz/**/*.pdf
 psites/plastid/*/*

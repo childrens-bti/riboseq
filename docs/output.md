@@ -533,6 +533,10 @@ Produced only when `--run_price true` is set. PRICE is invoked once across the r
   - `*.catalogue.mqc.tsv`: per-class ORF counts surfaced as a MultiQC custom-content table.
 - `orf_predictions/catalogue/consensus/`
   - `*.consensus.bed12`, `*.consensus.tsv`, `*.consensus.orf_to_gene.tsv`: the catalogue filtered to ORFs supported by at least `--orf_min_callers` distinct callers and recurring in at least `--orf_min_samples` samples. Identical to the full catalogue at the defaults (1/1); raise either for a higher-confidence subset. The full catalogue above is always published regardless.
+- `orf_predictions/catalogue/summary/`
+  - `cohort_orfs.tsv`: One row per consensus ORF with gene symbols (`gene_symbol`) and transcript names (`transcript_name`) from the run's full `--gtf` reference, distinct host-gene and host-transcript counts, and compact caller and sample support. Unmatched names are blank, including StringTie `MSTRG` IDs with no GENCODE name. The original consensus TSV and ORF-to-gene sidecar retain all technical evidence and mappings.
+  - `samples/<sample>_orfs.tsv`: Cohort-summary rows whose `cohort_samples` includes that Ribo-seq sample; a sample with no qualifying ORFs has a header-only file. `cohort_callers`, `cohort_n_callers`, `cohort_samples`, and `cohort_n_samples` remain cohort-level evidence. The displayed gene, transcript, and genomic span are the cohort representative and may come from a different locus after small-ORF peptide collapse. `n_host_genes` and `n_host_transcripts` signal mapping ambiguity. Coordinates retain the catalogue's 0-based, half-open convention.
+  - Both tables contain `orf_id`, `gene_id`, `gene_symbol`, `transcript_id`, `transcript_name`, `n_host_genes`, `n_host_transcripts`, `orf_class`, `aa_length`, `is_smorf`, `chrom`, `start`, `end`, `strand`, `cohort_n_callers`, `cohort_callers`, `cohort_n_samples`, and `cohort_samples`. Caller-specific scores and native labels remain in `*.consensus.tsv`.
 
 </details>
 

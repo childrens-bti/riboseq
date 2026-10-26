@@ -22,12 +22,13 @@ nextflow_pipeline {
 
         then {
             // stable_name: All files + folders in ${params.outdir}/ with a stable name
-            def stable_name = getAllFilesFromDir(params.outdir, relative: true, includeDir: true, ignore: ['pipeline_info/*.{html,json,txt}'])
+            def stable_name = getAllFilesFromDir(params.outdir, relative: true, includeDir: true, ignore: ['pipeline_info/*.{html,json,txt}', 'orf_predictions/catalogue/summary', 'orf_predictions/catalogue/summary/**'])
             // stable_path: All files in ${params.outdir}/ with stable content
             def stable_path = getAllFilesFromDir(params.outdir, ignoreFile: 'tests/.nftignore_orf')
 
             def hybrid_gtf            = file("${params.outdir}/transcript_assembly/stringtie/hybrid_reference.gtf")
             def ribotish_pred_all     = file("${params.outdir}/orf_predictions/ribotish_all/allsamples_pred.txt")
+            def orf_summary           = file("${params.outdir}/orf_predictions/catalogue/summary/cohort_orfs.tsv")
 
             // An ORF whose gene id is missing from the RNA-seq matrix is
             // dropped from the ORF-level DTE join without an error.
@@ -48,6 +49,7 @@ nextflow_pipeline {
                 { assert hybrid_gtf.readLines().count { line -> line.contains('class_code "u"') } > 0 },
                 { assert hybrid_gtf.readLines().every { line -> !line.contains('class_code') || line.contains('class_code "u"') } },
                 { assert ribotish_pred_all.exists() && ribotish_pred_all.size() > 0 },
+                { assert orf_summary.exists() && orf_summary.readLines()[0].contains('gene_symbol') },
                 { assert catalogue_genes.size() > 0 },
                 { assert catalogue_genes.every { rna_genes.contains(it) } },
                 { assert snapshot(

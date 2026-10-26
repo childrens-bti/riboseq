@@ -1,0 +1,4 @@
+orf_id	chrom	start	end	strand	gene_id	transcript_id	orf_class	aa_length	called_by_ribotish	called_by_ribocode	called_by_ribotricer	called_by_rpbp	called_by_price	score_ribotish	score_ribocode	score_ribotricer	score_rpbp	score_price	n_samples	samples	orf_type_native	is_smorf
+orf1	chr1	100	250	+	ENSG1.1	ENST1.1	uORF	50	1	1	0	0	0	0.01	0.02				2	R1,R2	annotated	1
+orf2	chr2	200	400	-	MSTRG.1	MSTRG.1.1	novel_u	66	0	1	0	0	0		0.03				1	R1	novel	1
+orf3	chr3	300	900	+	ENSG3.1	ENST3.1	canonical_cds	200	0	0	1	0	0						1	R2	annotated	0

@@ -18,6 +18,7 @@ include { EXTENDED_ORF_SECOND_PASS_ALIGN  } from '../../subworkflows/local/exten
 include { ORF_CALLER_DISPATCH             } from '../../subworkflows/local/orf_caller_dispatch'
 include { COVERAGE_TRACKS                 } from '../../subworkflows/local/coverage_tracks'
 include { ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE } from '../../subworkflows/nf-core/orftable_fasta_gtf_buildorfcatalogue/main'
+include { ORF_CONSENSUS_SUMMARY          } from '../../modules/local/orf_consensus_summary'
 include { QUANTIFY_ORF_PSITE              } from '../../subworkflows/local/quantify_orf_psite'
 include { DTE_COUNTS_PREP          } from '../../modules/local/dte_counts_prep'
 include { DESEQ2_DELTATE as DESEQ2_DELTATE_ORF } from '../../modules/local/deseq2/deltate'
@@ -571,6 +572,12 @@ workflow RIBOSEQ {
             ch_fasta          .map { fasta -> [ [id: 'reference'], fasta ] },
             ch_full_hybrid_gtf.map { gtf   -> [ [id: 'reference'], gtf   ] },
             !params.skip_orf_collapse
+        )
+        ORF_CONSENSUS_SUMMARY(
+            ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.consensus_tsv
+                .join(ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.consensus_orf_to_gene_tsv),
+            ch_gtf,
+            ch_samplesheet
         )
         ch_multiqc_files = ch_multiqc_files.mix(ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.multiqc.collect{ tup -> tup[1] }.ifEmpty([]))
     }
