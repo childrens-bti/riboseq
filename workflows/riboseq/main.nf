@@ -19,6 +19,7 @@ include { ORF_CALLER_DISPATCH             } from '../../subworkflows/local/orf_c
 include { COVERAGE_TRACKS                 } from '../../subworkflows/local/coverage_tracks'
 include { ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE } from '../../subworkflows/nf-core/orftable_fasta_gtf_buildorfcatalogue/main'
 include { ORF_CONSENSUS_SUMMARY          } from '../../modules/local/orf_consensus_summary'
+include { ANNOTATE_TE_TABLES             } from '../../modules/local/annotate_te_tables'
 include { QUANTIFY_ORF_PSITE              } from '../../subworkflows/local/quantify_orf_psite'
 include { DTE_COUNTS_PREP          } from '../../modules/local/dte_counts_prep'
 include { DESEQ2_DELTATE as DESEQ2_DELTATE_ORF } from '../../modules/local/deseq2/deltate'
@@ -774,10 +775,20 @@ workflow RIBOSEQ {
         // subfolder and file name), so several can be produced in one run.
         def te_methods = params.translational_efficiency_method.tokenize(',')*.trim()
 
+        // Per-feature result tables, published with gene symbols by ANNOTATE_TE_TABLES:
+        // [ meta + [te_dir: results subfolder], tables, orf_to_gene or [] ]
+        ch_te_tables = channel.empty()
+
         if ('anota2seq' in te_methods) {
             ANOTA2SEQ_ANOTA2SEQRUN(
                 ch_contrasts,
                 ch_samplesheet_matrix
+            )
+            ch_te_tables = ch_te_tables.mix(
+                ANOTA2SEQ_ANOTA2SEQRUN.out.translated_mrna
+                    .mix(ANOTA2SEQ_ANOTA2SEQRUN.out.total_mrna, ANOTA2SEQ_ANOTA2SEQRUN.out.translation, ANOTA2SEQ_ANOTA2SEQRUN.out.buffering, ANOTA2SEQ_ANOTA2SEQRUN.out.mrna_abundance)
+                    .groupTuple()
+                    .map { meta, tables -> [ meta + [te_dir: 'anota2seq'], tables, [] ] }
             )
         }
 
@@ -785,6 +796,12 @@ workflow RIBOSEQ {
             DESEQ2_DELTATE(
                 ch_contrasts,
                 ch_samplesheet_matrix
+            )
+            ch_te_tables = ch_te_tables.mix(
+                DESEQ2_DELTATE.out.translation
+                    .mix(DESEQ2_DELTATE.out.translated_mrna, DESEQ2_DELTATE.out.total_mrna, DESEQ2_DELTATE.out.dtegs, DESEQ2_DELTATE.out.mrna_abundance, DESEQ2_DELTATE.out.translation_genes, DESEQ2_DELTATE.out.intensified, DESEQ2_DELTATE.out.buffering)
+                    .groupTuple()
+                    .map { meta, tables -> [ meta + [te_dir: 'deltate'], tables, [] ] }
             )
         }
 
@@ -873,10 +890,19 @@ workflow RIBOSEQ {
                 .map { meta, counts, samplesheet -> [ meta, samplesheet, counts ] }
                 .first()
 
+            ch_orf_to_gene = ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.orf_to_gene_tsv.map { _meta, tsv -> tsv }
+
             if ('anota2seq' in te_methods) {
                 ANOTA2SEQ_ANOTA2SEQRUN_ORF(
                     ch_contrasts,
                     ch_orf_samplesheet_matrix
+                )
+                ch_te_tables = ch_te_tables.mix(
+                    ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.translated_mrna
+                        .mix(ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.total_mrna, ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.translation, ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.buffering, ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.mrna_abundance)
+                        .groupTuple()
+                        .combine(ch_orf_to_gene)
+                        .map { meta, tables, o2g -> [ meta + [te_dir: 'orf_level/anota2seq'], tables, o2g ] }
                 )
             }
 
@@ -884,6 +910,13 @@ workflow RIBOSEQ {
                 DESEQ2_DELTATE_ORF(
                     ch_contrasts,
                     ch_orf_samplesheet_matrix
+                )
+                ch_te_tables = ch_te_tables.mix(
+                    DESEQ2_DELTATE_ORF.out.translation
+                        .mix(DESEQ2_DELTATE_ORF.out.translated_mrna, DESEQ2_DELTATE_ORF.out.total_mrna, DESEQ2_DELTATE_ORF.out.dtegs, DESEQ2_DELTATE_ORF.out.mrna_abundance, DESEQ2_DELTATE_ORF.out.translation_genes, DESEQ2_DELTATE_ORF.out.intensified, DESEQ2_DELTATE_ORF.out.buffering)
+                        .groupTuple()
+                        .combine(ch_orf_to_gene)
+                        .map { meta, tables, o2g -> [ meta + [te_dir: 'orf_level/deltate'], tables, o2g ] }
                 )
             }
 
@@ -898,8 +931,20 @@ workflow RIBOSEQ {
                     ch_contrasts,
                     ch_dotseq_input
                 )
+                ch_te_tables = ch_te_tables.mix(
+                    DOTSEQ_DOTSEQ_ORF.out.translation
+                        .mix(DOTSEQ_DOTSEQ_ORF.out.dou, DOTSEQ_DOTSEQ_ORF.out.dou_strategy, DOTSEQ_DOTSEQ_ORF.out.dte_strategy)
+                        .groupTuple()
+                        .combine(ch_orf_to_gene)
+                        .map { meta, tables, o2g -> [ meta + [te_dir: 'orf_level/dotseq'], tables, o2g ] }
+                )
             }
         }
+
+        ANNOTATE_TE_TABLES(
+            ch_te_tables,
+            ch_gtf.first()
+        )
     }
 
     //

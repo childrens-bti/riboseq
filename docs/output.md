@@ -682,6 +682,8 @@ When the parameter `--te_quantification_method pseudo` is used, reads are quanti
 
 The pipeline supports two methods for translational efficiency analysis: anota2seq (default) and deltaTE. The method used depends on the `--translational_efficiency_method` parameter.
 
+All per-feature result tables (`*.results.tsv`, `*.genes.tsv`) are published with gene symbols from the reference GTF added after the identifier column: a `gene_symbol` column for gene-level tables, and `host_gene_id` plus `gene_symbol` for ORF-level tables (`;`-separated, in matching order, for ORFs with several host genes; empty for novel genes without a GTF `gene_name`).
+
 ### anota2seq outputs
 
 anota2seq produces the following outputs:
