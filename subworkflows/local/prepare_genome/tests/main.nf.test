@@ -1,0 +1,55 @@
+nextflow_workflow {
+    name "Test Subworkflow PREPARE_GENOME"
+    script "../main.nf"
+    workflow "PREPARE_GENOME"
+
+    tag "subworkflows"
+    tag "subworkflows_local"
+    tag "subworkflows/prepare_genome"
+
+    test("supplied SortMeRNA index keeps process input tuple") {
+        options "-stub"
+
+        when {
+            workflow {
+                """
+                def fasta = file("${projectDir}/subworkflows/local/prepare_genome/tests/reference.fa", checkIfExists: true)
+                def gtf = file("${projectDir}/subworkflows/local/prepare_genome/tests/reference.gtf", checkIfExists: true)
+                input[0] = fasta
+                input[1] = gtf
+                input[2] = null
+                input[3] = null
+                input[4] = fasta
+                input[5] = null
+                input[6] = null
+                input[7] = null
+                input[8] = null
+                input[9] = null
+                input[10] = null
+                input[11] = file("${projectDir}/subworkflows/local/prepare_genome/tests/idx", checkIfExists: true)
+                input[12] = false
+                input[13] = null
+                input[14] = true
+                input[15] = true
+                input[16] = false
+                input[17] = 'ribodetector'
+                input[18] = 'salmon'
+                input[19] = false
+                input[20] = false
+                input[21] = gtf
+                """
+            }
+        }
+
+        then {
+            def index = workflow.out.sortmerna_index[0]
+            assertAll(
+                { assert workflow.success },
+                { assert workflow.out.sortmerna_index.size() == 1 },
+                { assert index.size() == 2 },
+                { assert index[0] == [:] },
+                { assert path(index[1]).resolve('placeholder.txt').exists() },
+            )
+        }
+    }
+}
