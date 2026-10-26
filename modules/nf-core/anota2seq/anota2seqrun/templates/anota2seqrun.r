@@ -327,10 +327,13 @@ ads <- do.call(anota2seqDataSetFromMatrix, anota2seqDataSetFromMatrix_args)
 
 # Run anota2seqRun
 
+# anota2seq needs rows in sorted level order, but the weights must follow the
+# levels themselves (target = +1, reference = -1), not their sorted position
+contrast_levels <- sort(c(opt\$reference_level, opt\$target_level))
 contrast_matrix <- matrix(
-    c(-1, 1),
+    ifelse(contrast_levels == opt\$target_level, 1, -1),
     nrow = 2,
-    dimnames = list(sort(c(opt\$reference_level, opt\$target_level)), NULL)
+    dimnames = list(contrast_levels, NULL)
 )
 
 ads <- anota2seqRun(
