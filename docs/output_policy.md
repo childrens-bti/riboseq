@@ -19,7 +19,7 @@ The nf-core layout is kept, rather than flattened, so that upstream updates can 
 
 When a run succeeds, the pipeline's completion handler (`writeExportManifest` in `subworkflows/local/utils_nfcore_riboseq_pipeline/main.nf`) writes `<outdir>/export_manifest.txt`. It lists every published file that matches `params.export_paths`, one path per line relative to `outdir`, sorted.
 
-- Patterns are globs relative to `outdir`. `*` stays within one folder; `**` crosses folders. A pattern starting with `!` removes matching files.
+- `export_paths` is a comma-separated list of globs relative to `outdir`. `*` stays within one folder; `**` crosses folders. A pattern starting with `!` removes matching files.
 - A pattern that matches nothing is logged as a warning, not an error, because some outputs exist only for some runs (for example, translational efficiency needs contrasts).
 - A failed run writes no manifest.
 - `pipeline_info/` is delivered as a whole folder, because Nextflow writes its HTML reports after the manifest.

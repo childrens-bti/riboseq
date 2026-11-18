@@ -152,7 +152,7 @@ workflow PIPELINE_COMPLETION {
     main:
     summary_params = paramsSummaryMap(workflow, parameters_schema: "nextflow_schema.json")
     def multiqc_reports = multiqc_report.toList()
-    def export_paths = params.export_paths
+    def export_paths = params.export_paths.toString().tokenize(',')*.trim()
 
     //
     // Completion email and summary
