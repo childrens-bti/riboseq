@@ -1,14 +1,19 @@
 lint:
-  actions_ci: false
+  actions_nf_test: false
+  merge_markers:
+    - modules/nf-core/bowtie2/align/tests/main.nf.test.snap
   files_unchanged:
     - .gitignore
     - assets/nf-core-riboseq_logo_light.png
     - docs/images/nf-core-riboseq_logo_dark.png
     - docs/images/nf-core-riboseq_logo_light.png
+    - .github/workflows/branch.yml
+    - .github/workflows/linting.yml
   nextflow_config:
     - config_defaults:
         - params.ribo_database_manifest
-nf_core_version: 3.2.0
+  nf_test_content: false
+nf_core_version: 4.1.0
 repository_type: pipeline
 template:
   author: Jonathan Manning
@@ -18,4 +23,4 @@ template:
   name: riboseq
   org: nf-core
   outdir: .
-  version: 1.1.0dev
+  version: 2.0.0
