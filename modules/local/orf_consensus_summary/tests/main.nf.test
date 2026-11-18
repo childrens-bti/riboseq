@@ -1,0 +1,79 @@
+nextflow_process {
+
+    name "Test Process ORF_CONSENSUS_SUMMARY"
+    script "../main.nf"
+    process "ORF_CONSENSUS_SUMMARY"
+
+    tag "modules"
+    tag "modules_local"
+    tag "orf_consensus_summary"
+
+    test("annotates representatives and splits cohort rows by sample") {
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id: 'cohort' ],
+                    file("${projectDir}/modules/local/orf_consensus_summary/tests/consensus.tsv", checkIfExists: true),
+                    file("${projectDir}/modules/local/orf_consensus_summary/tests/mapping.tsv", checkIfExists: true),
+                ]
+                input[1] = file("${projectDir}/modules/local/orf_consensus_summary/tests/annotation.gtf", checkIfExists: true)
+                input[2] = file("${projectDir}/modules/local/orf_consensus_summary/tests/samplesheet.csv", checkIfExists: true)
+                """
+            }
+        }
+
+        then {
+            def cohort = path(process.out.cohort[0][1]).readLines().collect { it.split('\t', -1) as List }
+            def columns = cohort[0]
+            def rows = cohort.drop(1).collectEntries { row -> [(row[0]): columns.indices.collectEntries { i -> [(columns[i]): row[i]] }] }
+            def sample_files = process.out.samples[0][1].collectEntries { f -> [(path(f).fileName.toString()): path(f)] }
+
+            assertAll(
+                { assert process.success },
+                { assert columns == ['orf_id', 'gene_id', 'gene_symbol', 'transcript_id', 'transcript_name', 'n_host_genes', 'n_host_transcripts', 'orf_class', 'aa_length', 'is_smorf', 'chrom', 'start', 'end', 'strand', 'cohort_n_callers', 'cohort_callers', 'cohort_n_samples', 'cohort_samples'] },
+                { assert cohort.size() == 4 },
+                { assert rows['orf1'].gene_symbol == 'GENE_A' && rows['orf1'].transcript_name == 'GENE_A-201' },
+                { assert rows['orf1'].n_host_genes == '2' && rows['orf1'].n_host_transcripts == '2' },
+                { assert rows['orf1'].cohort_n_callers == '2' && rows['orf1'].cohort_callers == 'ribotish,ribocode' },
+                { assert rows['orf1'].cohort_n_samples == '2' && rows['orf1'].cohort_samples == 'R1,R2' },
+                { assert rows['orf2'].gene_symbol == '' && rows['orf2'].transcript_name == '' },
+                { assert rows['orf3'].gene_symbol == 'GENE_C' },
+                { assert rows['orf3'].n_host_genes == '1' && rows['orf3'].n_host_transcripts == '2' },
+                { assert sample_files.keySet() == ['sample_R1_orfs.tsv', 'sample_R2_orfs.tsv', 'sample_R3_orfs.tsv'] as Set },
+                { assert sample_files['sample_R1_orfs.tsv'].readLines().drop(1).collect { it.split('\t', -1)[0] } == ['orf1', 'orf2'] },
+                { assert sample_files['sample_R2_orfs.tsv'].readLines().drop(1).collect { it.split('\t', -1)[0] } == ['orf1', 'orf3'] },
+                { assert sample_files['sample_R3_orfs.tsv'].readLines().size() == 1 },
+            )
+        }
+    }
+
+    test("stub creates cohort and Ribo-seq sample files") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id: 'cohort' ],
+                    file("${projectDir}/modules/local/orf_consensus_summary/tests/consensus.tsv", checkIfExists: true),
+                    file("${projectDir}/modules/local/orf_consensus_summary/tests/mapping.tsv", checkIfExists: true),
+                ]
+                input[1] = file("${projectDir}/modules/local/orf_consensus_summary/tests/annotation.gtf", checkIfExists: true)
+                input[2] = file("${projectDir}/modules/local/orf_consensus_summary/tests/samplesheet.csv", checkIfExists: true)
+                """
+            }
+        }
+
+        then {
+            def sample_names = process.out.samples[0][1].collect { path(it).fileName.toString() }.toSet()
+            assertAll(
+                { assert process.success },
+                { assert path(process.out.cohort[0][1]).readLines() == ['orf_id'] },
+                { assert sample_names == ['sample_R1_orfs.tsv', 'sample_R2_orfs.tsv', 'sample_R3_orfs.tsv'] as Set },
+            )
+        }
+    }
+}

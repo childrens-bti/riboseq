@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: publish_cram_reference
+description: Publish an exact FASTA reference bundle for decoding CRAM files
+keywords: [cram, fasta, reference, checksum]
+tools:
+  - samtools:
+      description: Tools for manipulating next-generation sequencing data
+      homepage: https://www.htslib.org/
+      licence: ["MIT"]
+input:
+  - - fasta:
+        type: file
+        description: Reference FASTA used for CRAM encoding
+output:
+  fasta:
+    - "*.fasta":
+        type: file
+        description: Exact archived reference FASTA
+  fai:
+    - "*.fasta.fai":
+        type: file
+        description: FASTA index
+  checksum:
+    - "*.reference.sha256":
+        type: file
+        description: SHA-256 checksums for the FASTA and index

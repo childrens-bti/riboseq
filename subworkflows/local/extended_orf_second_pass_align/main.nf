@@ -67,6 +67,7 @@ workflow EXTENDED_ORF_SECOND_PASS_ALIGN {
 
     emit:
     transcriptome_bam = FASTQ_ALIGN_STAR_HYBRID.out.orig_bam_transcript // [ meta, bam ]
+    transcriptome_bam_sorted = FASTQ_ALIGN_STAR_HYBRID.out.bam_transcript // [ meta, bam ] - coordinate-sorted
     genome_bam        = FASTQ_ALIGN_STAR_HYBRID.out.bam                  // [ meta, bam ] - coordinate-sorted
     genome_bai        = FASTQ_ALIGN_STAR_HYBRID.out.index                // [ meta, bai ]
     transcript_fasta  = ch_hybrid_transcriptome_fasta                   // channel: path(fasta)

@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: annotate_te_tables
+description: Add gene symbols (and host genes for ORF-level tables) to translational efficiency result tables
+keywords:
+  - riboseq
+  - translational efficiency
+  - annotation
+  - gene symbol
+tools:
+  - python:
+      description: Python standard library
+      homepage: https://www.python.org/
+      documentation: https://docs.python.org/3/
+      licence: [PSF-2.0]
+input:
+  - - meta:
+        type: map
+        description: Contrast metadata, with `te_dir` giving the results subfolder to publish to
+    - tables:
+        type: file
+        description: Result TSVs whose first column is a gene or ORF identifier
+        pattern: "*.tsv"
+    - orf_to_gene:
+        type: file
+        description: ORF-to-host mapping for ORF-level tables (empty list for gene-level tables)
+        pattern: "*.orf_to_gene.tsv"
+  - - gtf:
+        type: file
+        description: Full reference GTF used by the pipeline
+        pattern: "*.gtf"
+output:
+  tables:
+    - - meta:
+          type: map
+          description: Contrast metadata
+      - annotated/*.tsv:
+          type: file
+          description: Input tables with `gene_symbol` (gene level) or `host_gene_id` and `gene_symbol` (ORF level) added after the identifier column
+          pattern: "annotated/*.tsv"
+authors:
+  - "@sychen9584"
+maintainers:
+  - "@sychen9584"

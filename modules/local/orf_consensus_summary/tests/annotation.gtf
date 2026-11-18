@@ -1,0 +1,6 @@
+chr1	GENCODE	gene	1	1000	.	+	.	gene_id "ENSG1.1"; gene_name "GENE_A";
+chr1	GENCODE	transcript	1	1000	.	+	.	gene_id "ENSG1.1"; transcript_id "ENST1.1"; transcript_name "GENE_A-201";
+chr1	GENCODE	gene	1	1000	.	+	.	gene_id "ENSG2.1"; gene_name "GENE_B";
+chr1	GENCODE	transcript	1	1000	.	+	.	gene_id "ENSG2.1"; transcript_id "ENST2.1"; transcript_name "GENE_B-201";
+chr3	GENCODE	transcript	1	1000	.	+	.	gene_id "ENSG3.1"; gene_name "GENE_C"; transcript_id "ENST3.1"; transcript_name "GENE_C-201";
+chr3	GENCODE	transcript	1	1000	.	+	.	gene_id "ENSG3.1"; transcript_id "ENST3.2"; transcript_name "GENE_C-202";
