@@ -1,35 +1,57 @@
 # Output policy
 
-This document defines what this fork of nf-core/riboseq saves, what it exports for analysis, and what is kept only for troubleshooting. For a description of each output file, see [output.md](output.md).
+This document defines what this fork of nf-core/riboseq publishes on CAVATICA, and what is kept only inside the task. For a description of each output file, see [output.md](output.md).
 
 > Status: implemented in the pipeline; not yet in a tagged release.
 
-## Generated vs exported
+## Only exported files are published
 
-The pipeline keeps nf-core's `results/` layout and publishes it on CAVATICA as one directory.
+The pipeline keeps nf-core's `results/` layout inside the task, so upstream updates still merge cleanly. When a run succeeds, its completion handler (`exportFlat` in `subworkflows/local/utils_nfcore_riboseq_pipeline/main.nf`) moves the files analysis uses into `<outdir>/export/`, flat (no folders). CAVATICA publishes only that folder (the `riboseq_results` output in `sb_nextflow_schema.yaml`); everything else stays inside the task and is not saved to the project. Re-run the pipeline if it is needed.
 
-- **What gets saved at all** is controlled by `publishDir` in `conf/modules.config`. Anything not needed is not published, rather than published and deleted later.
-- **What gets delivered** is the files listed in `export_manifest.txt`, plus the whole `pipeline_info/` folder.
-- **Delivery is manual for now.** Whoever delivers a run copies those files from the CAVATICA task outputs to the delivery location, using the manifest as the checklist. No pipeline step copies or deletes files.
-- Files not delivered can be deleted from the CAVATICA project after QC sign-off (MultiQC reviewed). Re-run the pipeline if they are needed later.
+- A failed run exports nothing.
+- An export rule that matches nothing is skipped, because some outputs exist only for some runs (for example, translational efficiency needs contrasts).
+- If two files would get the same exported name, the second is logged as an error and not exported.
+- Nextflow's execution report, timeline, trace and DAG are written after the completion handler, so they are not exported; CAVATICA's task logs cover the same information.
 
-The nf-core layout is kept, rather than flattened, so that upstream updates can still be merged cleanly.
+## Naming
 
-### How the manifest is written
+Each run is one task for the whole cohort. Set `output_basename` (`--outdir`) to the CAVATICA project name; CAVATICA task creation appends the task ID. Every exported file is named:
 
-When a run succeeds, the pipeline's completion handler (`writeExportManifest` in `subworkflows/local/utils_nfcore_riboseq_pipeline/main.nf`) writes `<outdir>/export_manifest.txt`. It lists every published file that matches `params.export_paths`, one path per line relative to `outdir`, sorted.
+```text
+<output_basename>_<CAVATICA_TASK_ID>_<tag><file name>
+```
 
-- `export_paths` is a comma-separated list of globs relative to `outdir`. `*` stays within one folder; `**` crosses folders. A pattern starting with `!` removes matching files.
-- A pattern that matches nothing is logged as a warning, not an error, because some outputs exist only for some runs (for example, translational efficiency needs contrasts).
-- A failed run writes no manifest.
-- `pipeline_info/` is delivered as a whole folder, because Nextflow writes its HTML reports after the manifest.
+- Per-sample files keep their samplesheet name after the prefix (put the BA ID in the samplesheet's `sample` column), e.g. `<prefix>_<BA_ID>.genome.sorted.cram`.
+- `<tag>` is added where file names alone would be unclear or would collide: `te_<method>_` and `te_orf_<method>_` for translational-efficiency results (gene-level and ORF-level anota2seq write the same file names), `cram_reference_`, `inframe_psite_` and `ribotish_`.
+
+## Exported files
+
+| Source in `outdir` | Exported as (after the prefix) | Why |
+|--------------------|-------------------------------|-----|
+| `alignment/star/sorted/*.sorted.cram` (+ `.crai`) | `<sample>.{genome,transcriptome}.sorted.cram` | Genome and transcriptome alignments |
+| `genome/cram_reference/{genome,transcriptome}.*` | `cram_reference_…` | References needed to read the CRAMs |
+| `multiqc/<aligner>/multiqc_report.html` | `multiqc_report.html` | QC report (self-contained HTML) |
+| `coverage/*.bigWig` | `<sample>.{forward,reverse,unstranded}.bigWig` | Tracks for IGV or the UCSC genome browser |
+| `psites/ribowaltz/ribowaltz_qc/*` | `<sample>.ribowaltz.*` | P-site QC plots and summary tables |
+| `quantification/salmon/salmon.merged.*` | `salmon.merged.*` | Gene and transcript counts, TPM and lengths, plus the SummarizedExperiment RDS files |
+| `quantification/inframe_psite/gene_counts.tsv` | `inframe_psite_gene_counts.tsv` | In-frame P-site gene counts |
+| `quantification/orf_level/orf_psite_counts.tsv` | `orf_psite_counts.tsv` | ORF count matrix |
+| `orf_predictions/catalogue/**` | `cohort.catalogue.*`, `cohort_orfs.tsv`, `<sample>_orfs.tsv`, … | ORF catalogue, consensus and summary tables |
+| `orf_predictions/ribotish_all/allsamples_*` | `ribotish_allsamples_*` | Joint Ribo-TISH predictions |
+| `translational_efficiency/<method>/*.{tsv,rds}` | `te_<method>_…` | Gene-level TE results with gene symbols |
+| `translational_efficiency/orf_level/**` | `te_orf_…` | ORF-level TE results and combined counts |
+| `transcript_assembly/stringtie/stringtie_merge*.gtf` | `stringtie_merge*.gtf` | Merged transcript models that the ORF catalogue refers to |
+| `pipeline_info/nf_core_riboseq_software_mqc_versions.yml` | same name | Software versions used |
+| `pipeline_info/params_<timestamp>.json` | same name | All run parameters, to reproduce the run |
+
+RDS files are exported only for genuine R objects (SummarizedExperiment, DESeqDataSet, Anota2seq, DOTSeq). Each has TSV tables beside it for readers who don't use R.
 
 ## Alignments
 
 All saved alignments are CRAM (`alignment_output_format = 'cram'`). BAMs exist only temporarily inside a run.
 
 - Genome and transcriptome alignments are both saved as CRAM, so P-site and quantification steps can be re-run without realigning.
-- A CRAM can only be read with the reference it was made with, so `genome/cram_reference/genome.*` and `transcriptome.*` are exported with every run.
+- A CRAM can only be read with the reference it was made with, so `genome/cram_reference/genome.*` and `transcriptome.*` are exported with every run (as `cram_reference_genome.*` and `cram_reference_transcriptome.*`).
 
 ## Not saved
 
@@ -39,38 +61,17 @@ All saved alignments are CRAM (`alignment_output_format = 'cram'`). BAMs exist o
 | `genome/` (indexes, sortmerna, FASTA copies), except `genome/cram_reference/` | Rebuilt from the reference (`save_reference = false`). |
 | `orf_predictions/ribocode/annotation/` | Rebuilt from the reference; identical across runs that use the same genome. |
 
-## Default export list
+## Not published (kept only inside the task)
 
-`params.export_paths`, relative to `outdir`:
-
-| Path | Why |
-|------|-----|
-| `alignment/star/sorted/*.sorted.cram` (+ `.crai`) | Genome and transcriptome alignments |
-| `genome/cram_reference/genome.*`, `transcriptome.*` | References needed to read the CRAMs |
-| `multiqc/**` | QC report |
-| `coverage/*.bigWig` | Tracks for IGV or the UCSC genome browser |
-| `psites/ribowaltz/ribowaltz_qc/*` | P-site QC plots and summary tables (not the per-read P-site TSV.gz files) |
-| `quantification/salmon/salmon.merged.*` | Gene and transcript counts, TPM and lengths (TSV), plus the SummarizedExperiment RDS files |
-| `quantification/inframe_psite/gene_counts.tsv` | In-frame P-site gene counts |
-| `quantification/orf_level/orf_psite_counts.tsv` | ORF count matrix |
-| `orf_predictions/catalogue/**` | ORF catalogue: consensus, summary (`cohort_orfs.tsv`, per-sample ORF tables) |
-| `orf_predictions/ribotish_all/allsamples_*` | Joint Ribo-TISH predictions |
-| `translational_efficiency/**.tsv`, `**.rds` | deltaTE, anota2seq and DOTSeq results with gene symbols |
-| `transcript_assembly/stringtie/*.gtf`, excluding `!…/*.denovo.transcripts.gtf` | Merged transcript models that the ORF catalogue refers to |
-
-Plus `pipeline_info/` (parameters, software versions, execution trace and reports), delivered as a folder.
-
-RDS files are exported only for genuine R objects (SummarizedExperiment, DESeqDataSet, Anota2seq, DOTSeq). Each has TSV tables beside it for readers who don't use R.
-
-## Generated but not exported (troubleshooting only)
-
-- `preprocessing/` (trimming, rRNA removal, FastQC, read-length statistics). These are summarized in MultiQC.
+- `preprocessing/` (trimming, rRNA removal, FastQC, read-length statistics), summarized in MultiQC
+- MultiQC's `multiqc_data/` and plot folders
 - `alignment/*/log/`, `samtools_stats/`, `picard_metrics/`
 - Hybrid-STAR alignments and their reference (`alignment/hybrid_star/`, `genome/cram_reference/hybrid_transcriptome.*`), produced only with `extended_orf_analysis`
 - Per-tool ORF predictions (`orf_predictions/ribotish/`, `ribocode/`, `ribotricer/`, `price/`, `rpbp/`)
 - The per-read riboWaltz P-site tables, `psites/plastid/`, and `riboseq_qc/`
 - The per-sample StringTie GTFs and `gffcompare/`
 - Translational-efficiency plots
+- Nextflow's execution report, timeline, trace and DAG
 
 ## Merging across samples
 

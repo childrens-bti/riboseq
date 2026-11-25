@@ -152,13 +152,12 @@ workflow PIPELINE_COMPLETION {
     main:
     summary_params = paramsSummaryMap(workflow, parameters_schema: "nextflow_schema.json")
     def multiqc_reports = multiqc_report.toList()
-    def export_paths = params.export_paths.toString().tokenize(',')*.trim()
 
     //
     // Completion email and summary
     //
     workflow.onComplete {
-        writeExportManifest(outdir, export_paths)
+        exportFlat(outdir)
 
         if (email || email_on_fail) {
             completionEmail(
@@ -186,44 +185,69 @@ workflow PIPELINE_COMPLETION {
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 //
-// Write <outdir>/export_manifest.txt: published files matching params.export_paths
-// (globs relative to outdir; a leading "!" excludes matches), one relative path per
-// line, sorted. Patterns that match nothing are logged as warnings. See
-// docs/output_policy.md.
+// Move the files analysis uses into <outdir>/export/, flat, each named
+// <outdir name>_<tag><file name>. CAVATICA publishes only this folder
+// (sb_nextflow_schema.yaml); see docs/output_policy.md. Runs only on success.
 //
-def writeExportManifest(outdir, patterns) {
+def exportFlat(outdir) {
     if (!workflow.success) {
         return
     }
     def root = java.nio.file.Paths.get(outdir.toString()).toAbsolutePath().normalize()
     if (!java.nio.file.Files.isDirectory(root)) {
-        log.warn "Export manifest not written: ${outdir} is not a local directory"
+        log.warn "Export skipped: ${outdir} is not a local directory"
         return
     }
-    def fs      = java.nio.file.FileSystems.getDefault()
-    def include = patterns.findAll { !it.startsWith('!') }
-    def exclude = patterns.findAll { it.startsWith('!') }.collect { fs.getPathMatcher("glob:${it.substring(1)}") }
-
+    def prefix = root.fileName.toString()
+    def fs     = java.nio.file.FileSystems.getDefault()
+    // [glob relative to outdir, tag added after the prefix]. ORF-level TE rules come
+    // before the gene-level one, which would otherwise also match orf_level/*.tsv.
+    def rules = [
+        ['alignment/star/sorted/*.sorted.cram',                 ''],
+        ['alignment/star/sorted/*.sorted.cram.crai',            ''],
+        ['genome/cram_reference/{genome,transcriptome}.*',      'cram_reference_'],
+        ['multiqc/*/multiqc_report.html',                       ''],
+        ['coverage/*.bigWig',                                   ''],
+        ['psites/ribowaltz/ribowaltz_qc/*',                     ''],
+        ['quantification/salmon/salmon.merged.*',               ''],
+        ['quantification/inframe_psite/gene_counts.tsv',        'inframe_psite_'],
+        ['quantification/orf_level/orf_psite_counts.tsv',       ''],
+        ['orf_predictions/catalogue/**',                        ''],
+        ['orf_predictions/ribotish_all/allsamples_*',           'ribotish_'],
+        ['translational_efficiency/orf_level/*/*.{tsv,rds}',    'te_orf_'],
+        ['translational_efficiency/orf_level/*.tsv',            'te_orf_'],
+        ['translational_efficiency/*/*.{tsv,rds}',              'te_'],
+        ['transcript_assembly/stringtie/stringtie_merge*.gtf',  ''],
+        ['pipeline_info/nf_core_riboseq_software_mqc_versions.yml', ''],
+        ['pipeline_info/params_*.json',                         ''],
+    ]
     def files = []
     java.nio.file.Files.walk(root).withCloseable { stream ->
         stream.filter { java.nio.file.Files.isRegularFile(it) }.forEach { files << root.relativize(it) }
     }
-
-    def selected  = [] as Set
-    def unmatched = []
-    include.each { pattern ->
+    def export = root.resolve('export')
+    java.nio.file.Files.createDirectories(export)
+    def seen = [:]
+    def done = [] as Set
+    rules.each { rule ->
+        def pattern = rule[0]
+        def tag     = rule[1]
         def matcher = fs.getPathMatcher("glob:${pattern}")
-        def hits    = files.findAll { matcher.matches(it) }
-        if (hits) { selected.addAll(hits) } else { unmatched << pattern }
+        files.findAll { matcher.matches(it) && !done.contains(it) }.each { rel ->
+            done << rel
+            // TE files get their method folder in the name, e.g. te_anota2seq_, te_orf_dotseq_
+            def depth  = tag == 'te_' ? 3 : 4
+            def method = (tag.startsWith('te_') && rel.nameCount == depth) ? "${rel.getName(rel.nameCount - 2)}_" : ''
+            def name   = "${prefix}_${tag}${method}${rel.fileName}"
+            if (seen.containsKey(name)) {
+                log.error "Export name collision: ${rel} and ${seen[name]} both map to ${name}; ${rel} not exported"
+                return
+            }
+            seen[name] = rel
+            java.nio.file.Files.move(root.resolve(rel), export.resolve(name))
+        }
     }
-    selected.removeAll { rel -> exclude.any { it.matches(rel) } }
-
-    def manifest = root.resolve('export_manifest.txt')
-    manifest.text = selected.collect { it.toString() }.sort().join('\n') + (selected ? '\n' : '')
-    log.info "Export manifest: ${selected.size()} files listed in ${manifest}"
-    if (unmatched) {
-        log.warn "Export paths that matched no files (expected if that analysis was not run):\n  " + unmatched.join('\n  ')
-    }
+    log.info "Exported ${seen.size()} files to ${export}"
 }
 
 //

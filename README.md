@@ -24,14 +24,14 @@
 This is the childrens-bti fork of nf-core/riboseq, released as `v1.0.0` and based on nf-core/riboseq 2.0.0. Fork-specific behavior:
 
 - **CRAM output:** genome and transcriptome alignments are saved as CRAM, with the references needed to read them (`genome/cram_reference/`).
-- **Export manifest:** a successful run writes `<outdir>/export_manifest.txt`, listing the files to deliver (`params.export_paths`). Delivery is manual for now: copy the listed files plus `pipeline_info/`. See [docs/output_policy.md](docs/output_policy.md).
+- **Flat export:** a successful run moves the files analysis uses into `<outdir>/export/`, flat, each named `<outdir name>_<file>`, and CAVATICA publishes only that folder. Set `output_basename` (`--outdir`) to the CAVATICA project name; task creation appends the task ID. See [docs/output_policy.md](docs/output_policy.md).
 - **Less saved by default:** `save_align_intermeds = false`, and RiboCode's reference-derived `annotation/` is not published.
 
 ### Releasing
 
 Releases use semantic versioning (`vMAJOR.MINOR.PATCH`); `manifest.version` stays at the upstream version. To release:
 
-1. Run the tests on the release branch (`nf-test test`, or at least `nextflow run . -profile test,docker -stub-run --outdir <dir>` and check `export_manifest.txt`).
+1. Run the tests on the release branch (`nf-test test`, or at least `nextflow run . -profile test,docker -stub-run --outdir <dir>` and check `<dir>/export/`).
 2. Upload the branch to CAVATICA as a development app revision and run one small cohort.
 3. Merge, then tag the merge commit on `main` and push the tag (`git tag <new-tag> && git push origin <new-tag>`).
 4. Upload the release app revision and record the tag in the revision note.
@@ -127,7 +127,7 @@ To see the results of an example test run with a full size dataset refer to the 
 For more details about the output files and reports, please refer to the
 [output documentation](https://nf-co.re/riboseq/output).
 
-For what this fork saves, exports and deletes after QC, see [docs/output_policy.md](docs/output_policy.md).
+For what this fork publishes, see [docs/output_policy.md](docs/output_policy.md).
 
 ## Credits
 

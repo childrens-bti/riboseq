@@ -68,7 +68,7 @@ inputs:
   sbg:category: Input/output options
   sbg:icon: fas fa-folder-open
   type: string
-  doc: Directory name passed to Nextflow as --outdir. CAVATICA preserves this directory through the riboseq_results output.
+  doc: Name passed to Nextflow as --outdir. Exported files are prefixed with it (CAVATICA task creation appends the task ID); set it to the CAVATICA project name.
 - doc: Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits. If set in your user config file (`~/.nextflow/config`) then you don't need to specify this on the command line for every run.
   id: email
   inputBinding:
@@ -1643,9 +1643,10 @@ inputs:
 outputs:
 - id: riboseq_results
   label: Ribo-seq results
+  doc: Files analysis uses, flat, each prefixed with output_basename (see docs/output_policy.md).
   outputBinding:
-    glob: $(inputs.output_basename)
-  type: Directory
+    glob: $(inputs.output_basename)/export/*
+  type: File[]
 requirements:
 - class: InlineJavascriptRequirement
 sbg:links:
