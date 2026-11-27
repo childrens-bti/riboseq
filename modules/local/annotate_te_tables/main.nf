@@ -14,13 +14,10 @@ process ANNOTATE_TE_TABLES {
     output:
     tuple val(meta), path("annotated/*.tsv"), emit: tables
 
-    when:
-    task.ext.when == null || task.ext.when
-
     script:
     def orf_to_gene_arg = orf_to_gene ? "--orf-to-gene ${orf_to_gene}" : ''
     """
-    python ${projectDir}/bin/annotate_te_tables.py \\
+    annotate_te_tables.py \\
         --gtf ${gtf} \\
         ${orf_to_gene_arg} \\
         --outdir annotated \\

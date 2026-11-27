@@ -25,6 +25,16 @@ process BAM_TO_CRAM {
     samtools view --no-PG -C -T ${fasta} --threads ${task.cpus - 1} -o ${prefix}.cram ${bam}
     samtools index -@ ${task.cpus - 1} ${prefix}.cram ${prefix}.cram.crai
     samtools quickcheck -v ${prefix}.cram
+
+    # Compare read counts by flag between the BAM and the CRAM. Decoding the whole
+    # CRAM also checks that it reads back with this reference.
+    samtools flagstat -@ ${task.cpus - 1} -O tsv ${bam} > ${prefix}.bam.flagstat.tsv
+    samtools flagstat -@ ${task.cpus - 1} -O tsv --input-fmt-option reference=${fasta} ${prefix}.cram > ${prefix}.cram.flagstat.tsv
+    if ! cmp -s ${prefix}.bam.flagstat.tsv ${prefix}.cram.flagstat.tsv; then
+        echo "ERROR: read counts differ between ${bam} and ${prefix}.cram" >&2
+        diff ${prefix}.bam.flagstat.tsv ${prefix}.cram.flagstat.tsv >&2
+        exit 1
+    fi
     """
 
     stub:

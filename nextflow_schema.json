@@ -950,6 +950,14 @@
                     "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
                     "hidden": true
                 },
+                "flat_export": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Also link the files analysis uses into <outdir>/export/, flat and prefixed with the outdir name.",
+                    "help_text": "Used on CAVATICA, which publishes only export/. See docs/output_policy.md.",
+                    "fa_icon": "fas fa-file-export",
+                    "hidden": true
+                },
                 "email_on_fail": {
                     "type": "string",
                     "description": "Email address for completion summary, only when pipeline fails.",

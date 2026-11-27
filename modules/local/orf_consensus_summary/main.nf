@@ -16,12 +16,9 @@ process ORF_CONSENSUS_SUMMARY {
     tuple val(meta), path("cohort_orfs.tsv")   , emit: cohort
     tuple val(meta), path("sample_*_orfs.tsv", optional: true), emit: samples
 
-    when:
-    task.ext.when == null || task.ext.when
-
     script:
     """
-    python ${projectDir}/bin/orf_consensus_summary.py \
+    orf_consensus_summary.py \
         --consensus ${consensus_tsv} \
         --mapping ${orf_to_gene_tsv} \
         --gtf ${gtf} \

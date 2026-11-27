@@ -152,12 +152,15 @@ workflow PIPELINE_COMPLETION {
     main:
     summary_params = paramsSummaryMap(workflow, parameters_schema: "nextflow_schema.json")
     def multiqc_reports = multiqc_report.toList()
+    def flat_export = params.flat_export
 
     //
     // Completion email and summary
     //
     workflow.onComplete {
-        exportFlat(outdir)
+        if (flat_export) {
+            exportFlat(outdir)
+        }
 
         if (email || email_on_fail) {
             completionEmail(
@@ -185,9 +188,11 @@ workflow PIPELINE_COMPLETION {
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 //
-// Move the files analysis uses into <outdir>/export/, flat, each named
+// Link the files analysis uses into <outdir>/export/ (hard links, or copies where
+// linking isn't possible), flat, each named
 // <outdir name>_<tag><file name>. CAVATICA publishes only this folder
-// (sb_nextflow_schema.yaml); see docs/output_policy.md. Runs only on success.
+// (sb_nextflow_schema.yaml); see docs/output_policy.md. Runs only on success, and
+// only with --flat_export; the nf-core layout in outdir is left unchanged.
 //
 def exportFlat(outdir) {
     if (!workflow.success) {
@@ -205,7 +210,12 @@ def exportFlat(outdir) {
     def rules = [
         ['alignment/star/sorted/*.sorted.cram',                 ''],
         ['alignment/star/sorted/*.sorted.cram.crai',            ''],
-        ['genome/cram_reference/{genome,transcriptome}.*',      'cram_reference_'],
+        // The genome FASTA (~3 GB) is not exported: its checksum is, and the run's params
+        // JSON records which FASTA was used. CRAMs also carry each sequence's MD5 (M5 tag),
+        // so the standard reference decodes them.
+        ['genome/cram_reference/genome.reference.sha256',       'cram_reference_'],
+        // The transcriptome FASTA is built from the run's GTF, so it is exported in full.
+        ['genome/cram_reference/transcriptome.*',               'cram_reference_'],
         ['multiqc/*/multiqc_report.html',                       ''],
         ['coverage/*.bigWig',                                   ''],
         ['psites/ribowaltz/ribowaltz_qc/*',                     ''],
@@ -223,7 +233,7 @@ def exportFlat(outdir) {
     ]
     def files = []
     java.nio.file.Files.walk(root).withCloseable { stream ->
-        stream.filter { java.nio.file.Files.isRegularFile(it) }.forEach { files << root.relativize(it) }
+        stream.filter { p -> java.nio.file.Files.isRegularFile(p) }.forEach { p -> files << root.relativize(p) }
     }
     def export = root.resolve('export')
     java.nio.file.Files.createDirectories(export)
@@ -233,7 +243,7 @@ def exportFlat(outdir) {
         def pattern = rule[0]
         def tag     = rule[1]
         def matcher = fs.getPathMatcher("glob:${pattern}")
-        files.findAll { matcher.matches(it) && !done.contains(it) }.each { rel ->
+        files.findAll { p -> matcher.matches(p) && !done.contains(p) }.each { rel ->
             done << rel
             // TE files get their method folder in the name, e.g. te_anota2seq_, te_orf_dotseq_
             def depth  = tag == 'te_' ? 3 : 4
@@ -244,7 +254,13 @@ def exportFlat(outdir) {
                 return
             }
             seen[name] = rel
-            java.nio.file.Files.move(root.resolve(rel), export.resolve(name))
+            def src = root.resolve(rel)
+            def dst = export.resolve(name)
+            try {
+                java.nio.file.Files.createLink(dst, src)
+            } catch (UnsupportedOperationException | java.io.IOException _e) {
+                java.nio.file.Files.copy(src, dst)
+            }
         }
     }
     log.info "Exported ${seen.size()} files to ${export}"
