@@ -1,0 +1,216 @@
+nextflow_pipeline {
+    name "CRAM publication and BAM compatibility"
+    script "../main.nf"
+    tag "pipeline"
+    tag "pipeline_riboseq"
+    tag "cram"
+
+    test("CRAM mode publishes both primary alignments and exact references") {
+        setup {
+            def config = new ConfigSlurper().parse(new File("${projectDir}/conf/test.config").toURI().toURL())
+            params.input = config.params.input
+        }
+
+        when {
+            params {
+                outdir = "$outputDir"
+                input = {
+                    def rows = params.input.toURL().readLines()
+                    def sheet = new File("${launchDir}/one_riboseq.csv")
+                    sheet.text = [rows.head(), rows.find { it.startsWith('"SRX11780885"') }].join('\n') + '\n'
+                    sheet.absolutePath
+                }()
+                contrasts = null
+                alignment_output_format = 'cram'
+                remove_ribo_rna = false
+                skip_ribotish = true
+                skip_ribocode = true
+                skip_ribowaltz = true
+                skip_plastid = true
+                skip_coverage_tracks = true
+            }
+        }
+
+        then {
+            def sorted = new File("${params.outdir}/alignment/star/sorted")
+            def references = new File("${params.outdir}/genome/cram_reference")
+            assert workflow.success
+            assert ['genome', 'transcriptome'].every { kind ->
+                new File(sorted, "SRX11780885.${kind}.sorted.cram").exists() &&
+                    new File(sorted, "SRX11780885.${kind}.sorted.cram.crai").exists() &&
+                    new File(references, "${kind}.fasta").exists() &&
+                    new File(references, "${kind}.fasta.fai").exists() &&
+                    new File(references, "${kind}.reference.sha256").exists()
+            }
+            assert ['genome', 'transcriptome'].every { kind ->
+                new File(references, "${kind}.reference.sha256").readLines().every { row ->
+                    def fields = row.trim().split(/\s+/, 2)
+                    def target = new File(references, fields[1])
+                    target.exists() && java.security.MessageDigest.getInstance('SHA-256')
+                        .digest(target.bytes).encodeHex().toString() == fields[0]
+                }
+            }
+            assert !sorted.listFiles().any { it.name.endsWith('.bam') || it.name.endsWith('.bai') }
+        }
+    }
+
+    test("CRAM mode handles mixed per-sample UMI status") {
+        setup {
+            def config = new ConfigSlurper().parse(new File("${projectDir}/conf/test.config").toURI().toURL())
+            params.input = config.params.input
+        }
+
+        when {
+            params {
+                outdir = "$outputDir"
+                input = {
+                    def rows = params.input.toURL().readLines()
+                    def sheet = new File("${launchDir}/mixed_umi_cram.csv")
+                    def header = rows.find { it.startsWith('"sample"') } + ',"with_umi"'
+                    def riboseq = rows.find { it.startsWith('"SRX11780885"') }.replace(',"auto",', ',"unstranded",') + ',"true"'
+                    def rnaseq = rows.find { it.startsWith('"SRX11780879"') }.replace(',"auto",', ',"unstranded",') + ',""'
+                    sheet.text = [header, riboseq, rnaseq].join('\n') + '\n'
+                    sheet.absolutePath
+                }()
+                contrasts = null
+                alignment_output_format = 'cram'
+                with_umi = false
+                extra_star_riboseq_align_args = '--seedSearchStartLmax 15 --winAnchorMultimapNmax 100'
+                novel_gtf = "${projectDir}/tests/data/novel_intergenic_chr20.gtf"
+                extended_orf_analysis = true
+                skip_stringtie = true
+                umitools_bc_pattern = 'NNNN'
+                umi_discard_read = 2
+                remove_ribo_rna = false
+                skip_trimming = true
+                skip_linting = true
+                skip_ribotish = true
+                skip_ribocode = true
+                skip_ribowaltz = true
+                skip_plastid = true
+                skip_coverage_tracks = true
+            }
+        }
+
+        then {
+            def sorted = new File("${params.outdir}/alignment/star/sorted")
+            assert workflow.success
+            assert ['SRX11780885', 'SRX11780879'].every { sample ->
+                ['genome', 'transcriptome'].every { kind ->
+                    new File(sorted, "${sample}.${kind}.sorted.cram").exists() &&
+                        new File(sorted, "${sample}.${kind}.sorted.cram.crai").exists()
+                }
+            }
+            assert sorted.listFiles().findAll { it.name.endsWith('.cram') }.size() == 4
+            def hybrid = new File("${params.outdir}/alignment/hybrid_star/sorted")
+            assert ['genome', 'transcriptome'].every { kind ->
+                new File(hybrid, "SRX11780885.hybrid.${kind}.sorted.cram").exists() &&
+                    new File(hybrid, "SRX11780885.hybrid.${kind}.sorted.cram.crai").exists()
+            }
+            assert hybrid.listFiles().findAll { it.name.endsWith('.cram') }.size() == 2
+            def star_scripts = []
+            new File("${launchDir}/work").eachFileRecurse { task_file ->
+                if (task_file.name == '.command.sh' && task_file.text.contains('--outFileNamePrefix')) {
+                    star_scripts << task_file.text
+                }
+            }
+            assert star_scripts.find { it.contains('--outFileNamePrefix SRX11780885.') }
+                .contains('--seedSearchStartLmax 15 --winAnchorMultimapNmax 100')
+            assert star_scripts.find { it.contains('--outFileNamePrefix SRX11780885.hybrid.') }
+                .contains('--seedSearchStartLmax 15 --winAnchorMultimapNmax 100')
+            assert !star_scripts.find { it.contains('--outFileNamePrefix SRX11780879.') }
+                .contains('--seedSearchStartLmax 15')
+        }
+    }
+
+    test("extended ORF analysis publishes hybrid CRAMs") {
+        setup {
+            def config = new ConfigSlurper().parse(new File("${projectDir}/conf/test.config").toURI().toURL())
+            params.input = config.params.input
+        }
+
+        when {
+            params {
+                outdir = "$outputDir"
+                input = {
+                    def rows = params.input.toURL().readLines()
+                    def sheet = new File("${launchDir}/hybrid_cram.csv")
+                    sheet.text = [rows.head(), rows.find { it.startsWith('"SRX11780885"') }].join('\n') + '\n'
+                    sheet.absolutePath
+                }()
+                contrasts = null
+                alignment_output_format = 'cram'
+                extra_star_riboseq_align_args = '--seedSearchStartLmax 15 --winAnchorMultimapNmax 100'
+                novel_gtf = "${projectDir}/tests/data/novel_intergenic_chr20.gtf"
+                extended_orf_analysis = true
+                skip_stringtie = true
+                remove_ribo_rna = false
+                skip_ribotish = true
+                skip_ribocode = true
+                skip_ribowaltz = true
+                skip_plastid = true
+                skip_coverage_tracks = true
+            }
+        }
+
+        then {
+            def hybrid = new File("${params.outdir}/alignment/hybrid_star")
+            assert workflow.success
+            assert ['genome', 'transcriptome'].every { kind ->
+                new File(hybrid, "sorted/SRX11780885.hybrid.${kind}.sorted.cram").exists() &&
+                    new File(hybrid, "sorted/SRX11780885.hybrid.${kind}.sorted.cram.crai").exists()
+            }
+            assert new File(hybrid, 'cram_reference/hybrid_transcriptome.fasta').exists()
+            assert new File(hybrid, 'cram_reference/hybrid_transcriptome.fasta.fai').exists()
+            assert new File(hybrid, 'cram_reference/hybrid_transcriptome.reference.sha256').exists()
+            def star_scripts = []
+            new File("${launchDir}/work").eachFileRecurse { task_file ->
+                if (task_file.name == '.command.sh' && task_file.text.contains('--outFileNamePrefix')) {
+                    star_scripts << task_file.text
+                }
+            }
+            assert ['SRX11780885.', 'SRX11780885.hybrid.'].every { prefix ->
+                star_scripts.find { it.contains("--outFileNamePrefix ${prefix}") }
+                    .contains('--seedSearchStartLmax 15 --winAnchorMultimapNmax 100')
+            }
+        }
+    }
+
+    test("BAM mode preserves release publication") {
+        setup {
+            def config = new ConfigSlurper().parse(new File("${projectDir}/conf/test.config").toURI().toURL())
+            params.input = config.params.input
+        }
+
+        when {
+            params {
+                outdir = "$outputDir"
+                input = {
+                    def rows = params.input.toURL().readLines()
+                    def sheet = new File("${launchDir}/one_riboseq_bam.csv")
+                    sheet.text = [rows.head(), rows.find { it.startsWith('"SRX11780885"') }].join('\n') + '\n'
+                    sheet.absolutePath
+                }()
+                contrasts = null
+                alignment_output_format = 'bam'
+                remove_ribo_rna = false
+                skip_ribotish = true
+                skip_ribocode = true
+                skip_ribowaltz = true
+                skip_plastid = true
+                skip_coverage_tracks = true
+            }
+        }
+
+        then {
+            def sorted = new File("${params.outdir}/alignment/star/sorted")
+            assert workflow.success
+            assert ['genome', 'transcriptome'].every { kind ->
+                new File(sorted, "SRX11780885.${kind}.sorted.bam").exists() &&
+                    new File(sorted, "SRX11780885.${kind}.sorted.bam.bai").exists()
+            }
+            assert !sorted.listFiles().any { it.name.endsWith('.cram') }
+            assert !new File("${params.outdir}/genome/cram_reference").exists()
+        }
+    }
+}

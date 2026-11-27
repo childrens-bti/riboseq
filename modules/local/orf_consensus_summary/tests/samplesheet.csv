@@ -1,0 +1,5 @@
+sample,fastq_1,fastq_2,strandedness,type,pair
+R1,unused_R1.fastq.gz,,auto,riboseq,R1
+R2,unused_R2.fastq.gz,,auto,riboseq,R2
+R3,unused_R3.fastq.gz,,auto,riboseq,R3
+RNA1,unused_RNA.fastq.gz,,auto,rnaseq,RNA1

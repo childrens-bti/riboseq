@@ -223,9 +223,9 @@ workflow PREPARE_GENOME {
     if ('sortmerna' in prepare_tool_indices) {
         if (sortmerna_index) {
             if (sortmerna_index.endsWith('.tar.gz')) {
-                ch_sortmerna_index = UNTAR_SORTMERNA_INDEX ( [ [:], sortmerna_index ] ).untar.map { tup -> tup[1] }
+                ch_sortmerna_index = UNTAR_SORTMERNA_INDEX ( [ [:], sortmerna_index ] ).untar
             } else {
-                ch_sortmerna_index = channel.value(file(sortmerna_index))
+                ch_sortmerna_index = channel.value([[:], file(sortmerna_index)])
             }
         } else {
             SORTMERNA_INDEX (

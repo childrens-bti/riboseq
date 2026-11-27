@@ -113,11 +113,6 @@
                 "alignment/star/log/SRX11780885.Log.out",
                 "alignment/star/log/SRX11780885.Log.progress.out",
                 "alignment/star/log/SRX11780885.SJ.out.tab",
-                "alignment/star/original",
-                "alignment/star/original/SRX11780879.Aligned.out.bam",
-                "alignment/star/original/SRX11780879.Aligned.toTranscriptome.out.bam",
-                "alignment/star/original/SRX11780885.Aligned.out.bam",
-                "alignment/star/original/SRX11780885.Aligned.toTranscriptome.out.bam",
                 "alignment/star/sorted",
                 "alignment/star/sorted/SRX11780879.genome.sorted.bam",
                 "alignment/star/sorted/SRX11780879.genome.sorted.bam.bai",
@@ -416,9 +411,9 @@
                 "tx2gene.tsv:md5,ca8bc3fbff91c83c6545743011e589d7"
             ]
         ],
-        "timestamp": "2026-08-04T18:57:05.131486353",
+        "timestamp": "2026-11-27T09:39:41.504959603",
         "meta": {
-            "nf-test": "0.9.5",
+            "nf-test": "0.9.4",
             "nextflow": "25.10.4"
         }
     }

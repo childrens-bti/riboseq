@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: orf_consensus_summary
+description: Annotate and condense the consensus ORF catalogue for cohort and sample views
+keywords:
+  - riboseq
+  - orf
+  - consensus
+  - annotation
+tools:
+  - python:
+      description: Python standard library
+      homepage: https://www.python.org/
+      documentation: https://docs.python.org/3/
+      licence: [PSF-2.0]
+input:
+  - - meta:
+        type: map
+        description: Cohort metadata
+    - consensus_tsv:
+        type: file
+        description: Final consensus catalogue TSV
+        pattern: "*.consensus.tsv"
+    - orf_to_gene_tsv:
+        type: file
+        description: Complete ORF-to-host mapping for the consensus catalogue
+        pattern: "*.consensus.orf_to_gene.tsv"
+  - - gtf:
+        type: file
+        description: Full reference GTF used by the pipeline
+        pattern: "*.gtf"
+  - - samplesheet:
+        type: file
+        description: Validated pipeline samplesheet
+        pattern: "*.csv"
+output:
+  cohort:
+    - - meta:
+          type: map
+          description: Cohort metadata
+      - cohort_orfs.tsv:
+          type: file
+          description: Annotated compact cohort consensus summary
+          pattern: "cohort_orfs.tsv"
+  samples:
+    - - meta:
+          type: map
+          description: Cohort metadata
+      - sample_orfs:
+          type: file
+          description: Per-sample subsets of the cohort summary
+          pattern: "sample_*_orfs.tsv"

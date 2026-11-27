@@ -152,11 +152,16 @@ workflow PIPELINE_COMPLETION {
     main:
     summary_params = paramsSummaryMap(workflow, parameters_schema: "nextflow_schema.json")
     def multiqc_reports = multiqc_report.toList()
+    def flat_export = params.flat_export
 
     //
     // Completion email and summary
     //
     workflow.onComplete {
+        if (flat_export) {
+            exportFlat(outdir)
+        }
+
         if (email || email_on_fail) {
             completionEmail(
                 summary_params,
@@ -182,6 +187,85 @@ workflow PIPELINE_COMPLETION {
     FUNCTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
+//
+// Link the files analysis uses into <outdir>/export/ (hard links, or copies where
+// linking isn't possible), flat, each named
+// <outdir name>_<tag><file name>. CAVATICA publishes only this folder
+// (sb_nextflow_schema.yaml); see docs/output_policy.md. Runs only on success, and
+// only with --flat_export; the nf-core layout in outdir is left unchanged.
+//
+def exportFlat(outdir) {
+    if (!workflow.success) {
+        return
+    }
+    def root = java.nio.file.Paths.get(outdir.toString()).toAbsolutePath().normalize()
+    if (!java.nio.file.Files.isDirectory(root)) {
+        log.warn "Export skipped: ${outdir} is not a local directory"
+        return
+    }
+    def prefix = root.fileName.toString()
+    def fs     = java.nio.file.FileSystems.getDefault()
+    // [glob relative to outdir, tag added after the prefix]. ORF-level TE rules come
+    // before the gene-level one, which would otherwise also match orf_level/*.tsv.
+    def rules = [
+        ['alignment/star/sorted/*.sorted.cram',                 ''],
+        ['alignment/star/sorted/*.sorted.cram.crai',            ''],
+        // The genome FASTA (~3 GB) is not exported: its checksum is, and the run's params
+        // JSON records which FASTA was used. CRAMs also carry each sequence's MD5 (M5 tag),
+        // so the standard reference decodes them.
+        ['genome/cram_reference/genome.reference.sha256',       'cram_reference_'],
+        // The transcriptome FASTA is built from the run's GTF, so it is exported in full.
+        ['genome/cram_reference/transcriptome.*',               'cram_reference_'],
+        ['multiqc/*/multiqc_report.html',                       ''],
+        ['coverage/*.bigWig',                                   ''],
+        ['psites/ribowaltz/ribowaltz_qc/*',                     ''],
+        ['quantification/salmon/salmon.merged.*',               ''],
+        ['quantification/inframe_psite/gene_counts.tsv',        'inframe_psite_'],
+        ['quantification/orf_level/orf_psite_counts.tsv',       ''],
+        ['orf_predictions/catalogue/**',                        ''],
+        ['orf_predictions/ribotish_all/allsamples_*',           'ribotish_'],
+        ['translational_efficiency/orf_level/*/*.{tsv,rds}',    'te_orf_'],
+        ['translational_efficiency/orf_level/*.tsv',            'te_orf_'],
+        ['translational_efficiency/*/*.{tsv,rds}',              'te_'],
+        ['transcript_assembly/stringtie/stringtie_merge*.gtf',  ''],
+        ['pipeline_info/nf_core_riboseq_software_mqc_versions.yml', ''],
+        ['pipeline_info/params_*.json',                         ''],
+    ]
+    def files = []
+    java.nio.file.Files.walk(root).withCloseable { stream ->
+        stream.filter { p -> java.nio.file.Files.isRegularFile(p) }.forEach { p -> files << root.relativize(p) }
+    }
+    def export = root.resolve('export')
+    java.nio.file.Files.createDirectories(export)
+    def seen = [:]
+    def done = [] as Set
+    rules.each { rule ->
+        def pattern = rule[0]
+        def tag     = rule[1]
+        def matcher = fs.getPathMatcher("glob:${pattern}")
+        files.findAll { p -> matcher.matches(p) && !done.contains(p) }.each { rel ->
+            done << rel
+            // TE files get their method folder in the name, e.g. te_anota2seq_, te_orf_dotseq_
+            def depth  = tag == 'te_' ? 3 : 4
+            def method = (tag.startsWith('te_') && rel.nameCount == depth) ? "${rel.getName(rel.nameCount - 2)}_" : ''
+            def name   = "${prefix}_${tag}${method}${rel.fileName}"
+            if (seen.containsKey(name)) {
+                log.error "Export name collision: ${rel} and ${seen[name]} both map to ${name}; ${rel} not exported"
+                return
+            }
+            seen[name] = rel
+            def src = root.resolve(rel)
+            def dst = export.resolve(name)
+            try {
+                java.nio.file.Files.createLink(dst, src)
+            } catch (UnsupportedOperationException | java.io.IOException _e) {
+                java.nio.file.Files.copy(src, dst)
+            }
+        }
+    }
+    log.info "Exported ${seen.size()} files to ${export}"
+}
+
 //
 // Check and validate pipeline parameters
 //

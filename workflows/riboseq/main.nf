@@ -18,12 +18,21 @@ include { EXTENDED_ORF_SECOND_PASS_ALIGN  } from '../../subworkflows/local/exten
 include { ORF_CALLER_DISPATCH             } from '../../subworkflows/local/orf_caller_dispatch'
 include { COVERAGE_TRACKS                 } from '../../subworkflows/local/coverage_tracks'
 include { ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE } from '../../subworkflows/nf-core/orftable_fasta_gtf_buildorfcatalogue/main'
+include { ORF_CONSENSUS_SUMMARY          } from '../../modules/local/orf_consensus_summary'
+include { ANNOTATE_TE_TABLES             } from '../../modules/local/annotate_te_tables'
 include { QUANTIFY_ORF_PSITE              } from '../../subworkflows/local/quantify_orf_psite'
 include { DTE_COUNTS_PREP          } from '../../modules/local/dte_counts_prep'
 include { DESEQ2_DELTATE as DESEQ2_DELTATE_ORF } from '../../modules/local/deseq2/deltate'
 include { ANOTA2SEQ_ANOTA2SEQRUN as ANOTA2SEQ_ANOTA2SEQRUN_ORF } from '../../modules/nf-core/anota2seq/anota2seqrun'
 include { DOTSEQ_DOTSEQ as DOTSEQ_DOTSEQ_ORF } from '../../modules/nf-core/dotseq/dotseq'
 include { GAWK as FILTER_COUNTS_CANONICAL                      } from '../../modules/nf-core/gawk'
+include { BAM_TO_CRAM as BAM_TO_CRAM_GENOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_TRANSCRIPTOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_HYBRID_GENOME } from '../../modules/local/bam_to_cram_validate'
+include { BAM_TO_CRAM as BAM_TO_CRAM_HYBRID_TRANSCRIPTOME } from '../../modules/local/bam_to_cram_validate'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_GENOME } from '../../modules/local/publish_cram_reference'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_TRANSCRIPTOME } from '../../modules/local/publish_cram_reference'
+include { PUBLISH_CRAM_REFERENCE as PUBLISH_CRAM_REFERENCE_HYBRID_TRANSCRIPTOME } from '../../modules/local/publish_cram_reference'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -297,6 +306,7 @@ workflow RIBOSEQ {
     ch_genome_bam              = FASTQ_ALIGN_STAR.out.bam
     ch_genome_bam_index        = FASTQ_ALIGN_STAR.out.index
     ch_transcriptome_bam       = FASTQ_ALIGN_STAR.out.orig_bam_transcript
+    ch_transcriptome_bam_for_cram = FASTQ_ALIGN_STAR.out.bam_transcript
 
     ch_multiqc_files = ch_multiqc_files
         .mix(FASTQ_ALIGN_STAR.out.stats
@@ -319,6 +329,7 @@ workflow RIBOSEQ {
         ch_genome_bam_without_umi        = ch_genome_bam.filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
         ch_genome_bam_index_without_umi  = ch_genome_bam_index.filter { meta, _index -> !umi_sample_ids.contains(meta.id) }
         ch_transcriptome_bam_without_umi = ch_transcriptome_bam.filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
+        ch_transcriptome_bam_for_cram_without_umi = ch_transcriptome_bam_for_cram.filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
 
         BAM_DEDUP_UMI(
             ch_genome_bam
@@ -334,10 +345,21 @@ workflow RIBOSEQ {
 
         ch_genome_bam        = BAM_DEDUP_UMI.out.bam.mix(ch_genome_bam_without_umi)
         ch_transcriptome_bam = BAM_DEDUP_UMI.out.transcriptome_bam.mix(ch_transcriptome_bam_without_umi)
+        ch_transcriptome_bam_for_cram = BAM_DEDUP_UMI.out.transcriptome_dedup_bam.mix(ch_transcriptome_bam_for_cram_without_umi)
         ch_genome_bam_index  = BAM_DEDUP_UMI.out.index.mix(ch_genome_bam_index_without_umi)
 
         ch_multiqc_files = ch_multiqc_files
             .mix(BAM_DEDUP_UMI.out.multiqc_files.map { _meta, file -> file })
+    }
+
+    if (params.alignment_output_format == 'cram') {
+        // Each reference must be a value channel to reach every sample.
+        ch_cram_genome_fasta = ch_fasta_fai.map { _meta, fasta, _fai -> fasta }
+        ch_cram_transcript_fasta = ch_transcript_fasta
+        PUBLISH_CRAM_REFERENCE_GENOME(ch_cram_genome_fasta)
+        PUBLISH_CRAM_REFERENCE_TRANSCRIPTOME(ch_cram_transcript_fasta)
+        BAM_TO_CRAM_GENOME(ch_genome_bam, ch_cram_genome_fasta)
+        BAM_TO_CRAM_TRANSCRIPTOME(ch_transcriptome_bam_for_cram, ch_cram_transcript_fasta)
     }
 
     //
@@ -439,6 +461,8 @@ workflow RIBOSEQ {
         )
 
         ch_hybrid_transcriptome_bam = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam
+        ch_hybrid_genome_bam_for_cram = EXTENDED_ORF_SECOND_PASS_ALIGN.out.genome_bam
+        ch_hybrid_transcriptome_bam_for_cram = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam_sorted
         ch_multiqc_files            = ch_multiqc_files.mix(EXTENDED_ORF_SECOND_PASS_ALIGN.out.multiqc_files)
 
         // Deduplicate the hybrid transcriptome BAM with the same UMI subworkflow
@@ -448,6 +472,10 @@ workflow RIBOSEQ {
         // identical to the primary path.
         if (umi_sample_ids) {
             ch_hybrid_transcriptome_bam_without_umi = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcriptome_bam
+                .filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
+            ch_hybrid_genome_bam_for_cram_without_umi = ch_hybrid_genome_bam_for_cram
+                .filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
+            ch_hybrid_transcriptome_bam_for_cram_without_umi = ch_hybrid_transcriptome_bam_for_cram
                 .filter { meta, _bam -> !umi_sample_ids.contains(meta.id) }
 
             BAM_DEDUP_UMI_HYBRID(
@@ -463,6 +491,17 @@ workflow RIBOSEQ {
             )
             ch_hybrid_transcriptome_bam = BAM_DEDUP_UMI_HYBRID.out.transcriptome_bam
                 .mix(ch_hybrid_transcriptome_bam_without_umi)
+            ch_hybrid_genome_bam_for_cram = BAM_DEDUP_UMI_HYBRID.out.bam
+                .mix(ch_hybrid_genome_bam_for_cram_without_umi)
+            ch_hybrid_transcriptome_bam_for_cram = BAM_DEDUP_UMI_HYBRID.out.transcriptome_dedup_bam
+                .mix(ch_hybrid_transcriptome_bam_for_cram_without_umi)
+        }
+
+        if (params.alignment_output_format == 'cram') {
+            ch_cram_hybrid_transcript_fasta = EXTENDED_ORF_SECOND_PASS_ALIGN.out.transcript_fasta
+            PUBLISH_CRAM_REFERENCE_HYBRID_TRANSCRIPTOME(ch_cram_hybrid_transcript_fasta)
+            BAM_TO_CRAM_HYBRID_GENOME(ch_hybrid_genome_bam_for_cram, ch_cram_genome_fasta)
+            BAM_TO_CRAM_HYBRID_TRANSCRIPTOME(ch_hybrid_transcriptome_bam_for_cram, ch_cram_hybrid_transcript_fasta)
         }
     }
 
@@ -534,6 +573,12 @@ workflow RIBOSEQ {
             ch_fasta          .map { fasta -> [ [id: 'reference'], fasta ] },
             ch_full_hybrid_gtf.map { gtf   -> [ [id: 'reference'], gtf   ] },
             !params.skip_orf_collapse
+        )
+        ORF_CONSENSUS_SUMMARY(
+            ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.consensus_tsv
+                .join(ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.consensus_orf_to_gene_tsv),
+            ch_gtf,
+            ch_samplesheet
         )
         ch_multiqc_files = ch_multiqc_files.mix(ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.multiqc.collect{ tup -> tup[1] }.ifEmpty([]))
     }
@@ -730,10 +775,20 @@ workflow RIBOSEQ {
         // subfolder and file name), so several can be produced in one run.
         def te_methods = params.translational_efficiency_method.tokenize(',')*.trim()
 
+        // Per-feature result tables, published with gene symbols by ANNOTATE_TE_TABLES:
+        // [ meta + [te_dir: results subfolder], tables, orf_to_gene or [] ]
+        ch_te_tables = channel.empty()
+
         if ('anota2seq' in te_methods) {
             ANOTA2SEQ_ANOTA2SEQRUN(
                 ch_contrasts,
                 ch_samplesheet_matrix
+            )
+            ch_te_tables = ch_te_tables.mix(
+                ANOTA2SEQ_ANOTA2SEQRUN.out.translated_mrna
+                    .mix(ANOTA2SEQ_ANOTA2SEQRUN.out.total_mrna, ANOTA2SEQ_ANOTA2SEQRUN.out.translation, ANOTA2SEQ_ANOTA2SEQRUN.out.buffering, ANOTA2SEQ_ANOTA2SEQRUN.out.mrna_abundance)
+                    .groupTuple()
+                    .map { meta, tables -> [ meta + [te_dir: 'anota2seq'], tables, [] ] }
             )
         }
 
@@ -741,6 +796,12 @@ workflow RIBOSEQ {
             DESEQ2_DELTATE(
                 ch_contrasts,
                 ch_samplesheet_matrix
+            )
+            ch_te_tables = ch_te_tables.mix(
+                DESEQ2_DELTATE.out.translation
+                    .mix(DESEQ2_DELTATE.out.translated_mrna, DESEQ2_DELTATE.out.total_mrna, DESEQ2_DELTATE.out.dtegs, DESEQ2_DELTATE.out.mrna_abundance, DESEQ2_DELTATE.out.translation_genes, DESEQ2_DELTATE.out.intensified, DESEQ2_DELTATE.out.buffering)
+                    .groupTuple()
+                    .map { meta, tables -> [ meta + [te_dir: 'deltate'], tables, [] ] }
             )
         }
 
@@ -829,10 +890,19 @@ workflow RIBOSEQ {
                 .map { meta, counts, samplesheet -> [ meta, samplesheet, counts ] }
                 .first()
 
+            ch_orf_to_gene = ORFTABLE_FASTA_GTF_BUILDORFCATALOGUE.out.orf_to_gene_tsv.map { _meta, tsv -> tsv }
+
             if ('anota2seq' in te_methods) {
                 ANOTA2SEQ_ANOTA2SEQRUN_ORF(
                     ch_contrasts,
                     ch_orf_samplesheet_matrix
+                )
+                ch_te_tables = ch_te_tables.mix(
+                    ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.translated_mrna
+                        .mix(ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.total_mrna, ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.translation, ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.buffering, ANOTA2SEQ_ANOTA2SEQRUN_ORF.out.mrna_abundance)
+                        .groupTuple()
+                        .combine(ch_orf_to_gene)
+                        .map { meta, tables, o2g -> [ meta + [te_dir: 'orf_level/anota2seq'], tables, o2g ] }
                 )
             }
 
@@ -840,6 +910,13 @@ workflow RIBOSEQ {
                 DESEQ2_DELTATE_ORF(
                     ch_contrasts,
                     ch_orf_samplesheet_matrix
+                )
+                ch_te_tables = ch_te_tables.mix(
+                    DESEQ2_DELTATE_ORF.out.translation
+                        .mix(DESEQ2_DELTATE_ORF.out.translated_mrna, DESEQ2_DELTATE_ORF.out.total_mrna, DESEQ2_DELTATE_ORF.out.dtegs, DESEQ2_DELTATE_ORF.out.mrna_abundance, DESEQ2_DELTATE_ORF.out.translation_genes, DESEQ2_DELTATE_ORF.out.intensified, DESEQ2_DELTATE_ORF.out.buffering)
+                        .groupTuple()
+                        .combine(ch_orf_to_gene)
+                        .map { meta, tables, o2g -> [ meta + [te_dir: 'orf_level/deltate'], tables, o2g ] }
                 )
             }
 
@@ -854,8 +931,20 @@ workflow RIBOSEQ {
                     ch_contrasts,
                     ch_dotseq_input
                 )
+                ch_te_tables = ch_te_tables.mix(
+                    DOTSEQ_DOTSEQ_ORF.out.translation
+                        .mix(DOTSEQ_DOTSEQ_ORF.out.dou, DOTSEQ_DOTSEQ_ORF.out.dou_strategy, DOTSEQ_DOTSEQ_ORF.out.dte_strategy)
+                        .groupTuple()
+                        .combine(ch_orf_to_gene)
+                        .map { meta, tables, o2g -> [ meta + [te_dir: 'orf_level/dotseq'], tables, o2g ] }
+                )
             }
         }
+
+        ANNOTATE_TE_TABLES(
+            ch_te_tables,
+            ch_gtf.first()
+        )
     }
 
     //
